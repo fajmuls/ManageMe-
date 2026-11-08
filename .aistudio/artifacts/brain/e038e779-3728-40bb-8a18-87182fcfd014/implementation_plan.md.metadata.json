@@ -1,0 +1,6 @@
+{
+  "summary":  "Rencana arsitektur dan implementasi komprehensif untuk Fajmuls Daily (Personal Super-App & Life OS) dengan 5 modul utama (Kosman, Keuangan, Kegiatan, Catatan, Waktu Ibadah), integrasi otomatis Keuangan ke Kosman dan Google Sheets, reset data bersih, pelacak waktu sholat native dengan branding waktuibadah.vercel.app, serta pelacakan versi modul di Pengaturan lengkap dengan saran developer.",
+  "updatedAt":  "2026-11-08T07:17:10.117973131Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

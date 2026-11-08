@@ -1,0 +1,8 @@
+{
+  "name": "ManageMe!",
+  "description": "ManageMe! — Solusi Manajemen Terpusat bergaya Pop Comic untuk KosMan, Keuangan & Cashflow, Log Harian, dan Catatan.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

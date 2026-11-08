@@ -1,0 +1,131 @@
+Anda adalah analis sistem dan software engineer. Berikut adalah spesifikasi lengkap, arsitektur, dan seluruh detail fitur dari aplikasi web "Fajmuls Daily" (Personal Productivity & Life Operating System). Gunakan konteks ini untuk melanjutkan pengembangan, analisis, migrasi, atau pembuatan fitur baru.
+
+---
+
+### RINGKASAN APLIKASI
+- Nama Aplikasi: Fajmuls Daily (Personal Super-App & Life OS)
+- Tech Stack: React 19 + TypeScript + Vite, Tailwind CSS, Firebase Firestore & Authentication, Node.js/Express proxy server, Google GenAI SDK (Gemini AI), Google Maps Platform, PWA (Progressive Web App).
+- Konsep Desain: Neo-Brutalist clean modern, ramah perangkat mobile & desktop, dukungan Dark Mode, haptic/sound effects (Web Audio API).
+
+---
+
+### 1. MENU UTAMA 1: BERANDA (DASHBOARD) & GLOBAL SYSTEM
+Menu pusat yang merangkum seluruh aktivitas harian pengguna:
+1. Ringkasan Keuangan Instan:
+   - Menampilkan total saldo bersih (Income vs Expense) dengan tombol sembunyikan nominal (Eye Toggle).
+   - Indikator ringkasan cepat anggaran dan catatan transaksi terbaru.
+2. Heatmap & Habit Streak Grid:
+   - Matriks visualisasi kebiasaan 28 hari terakhir untuk melihat konsistensi harian.
+   - Perhitungan jumlah hari aktif beruntun (Streak Tracker).
+3. Active Trip Widget & Floating Overlay:
+   - Menampilkan status perjalanan yang sedang aktif secara real-time (durasi menit berjalan, kota tujuan).
+   - Notifikasi mengambang (Floating Banner) di pojok bawah yang bisa diklik dari halaman mana pun.
+   - Tombol langsung untuk menyelesaikan perjalanan ("Selesaikan").
+4. Monthly Wrapped:
+   - Kilas balik bulanan interaktif bergaya Spotify Wrapped yang merangkum total pengeluaran, pemasukan, kategori belanja terbanyak, dan jumlah catatan.
+5. Asisten Suara AI (Global Voice Command & Memory):
+   - Integrasi mikrofon pintar di pojok atas.
+   - Smart Intent AI: Perintah suara otomatis mendeteksi apakah pengguna ingin mencatat keuangan (cth: "Pengeluaran 50 ribu beli kopi"), membuat catatan baru (cth: "Catat ide jualan"), atau berpindah halaman navigasi ("Buka catatan").
+   - Voice Memory: Jika pengguna bertanya tentang data masa lalu (cth: "Berapa total belanja saya bulan ini?"), AI Gemini akan membaca ringkasan data dan menjawab langsung lewat suara/teks.
+6. PWA & Push Notifications:
+   - Mendukung instalasi aplikasi ke layar utama HP/PC (PWA Install Banner).
+   - Pengingat Web Notification harian & notifikasi aktif saat trip sedang berlangsung.
+7. Quick Action Menu & Global Search:
+   - Tombol navigasi cepat untuk pencarian rute/fitur (Cmd/Ctrl + K modal).
+   - Pengaturan tema (Dark/Light mode toggle) dan Suara aplikasi (Audio on/off).
+
+---
+
+### 2. MENU UTAMA 2: KEUANGAN (FINANCE OS)
+Sistem manajemen finansial pribadi yang sangat detail dan komprehensif, dibagi ke dalam beberapa sub-tab:
+
+A. Pencatatan Transaksi (Records & Modal Input):
+- Pemasukan (Income) & Pengeluaran (Expense).
+- Pilihan tanggal fleksibel (Backdate atau masa depan).
+- Pemilih Kategori Visual:
+  * Grid kategori rapi (responsive 4–5 kolom).
+  * Kategori dapat dikelompokkan ke dalam Group / Parent (contoh: Grup "Makanan & Minuman" menaungi Kopi, Makan Siang, Camilan; Grup "Transportasi" menaungi Bensin, Tol, Ojek).
+  * Ikon dinamis (ratusan ikon Lucide yang dapat diubah) serta kustomisasi warna aksen tiap kategori.
+- Kalkulator Bawaan: Input kalkulator mini di form untuk memudahkan hitungan langsung sebelum simpan.
+- Bulk Record Entry: Kemampuan menyimpan banyak transaksi sekaligus.
+
+B. Fitur Kecerdasan Buatan (Smart AI Finance Tools):
+1. Natural Language Parse (Input Bahasa Bebas):
+   - Pengguna cukup mengetik kalimat santai (misal: "Beli bensin 35rb dan makan bakso 20rb kemarin"), AI Gemini otomatis membedah teks menjadi beberapa transaksi rapi lengkap dengan nominal, kategori, dan tanggal.
+2. Smart Receipt Scanner (AI OCR Struk Belanja):
+   - Upload foto atau scan struk fisik/faktur kasir.
+   - AI Gemini Vision otomatis mengekstrak total nominal belanja, nama toko/catatan, tanggal transaksi, dan merekomendasikan kategori yang sesuai.
+3. AI Financial Insight:
+   - Menganalisis pola transaksi belanja terkini dan memberikan rekomendasi, peringatan overspending, serta saran penghematan berbasis AI dalam Bahasa Indonesia.
+
+C. Perencanaan Keuangan (Planning & Goals):
+1. Anggaran Kategori (Budgeting):
+   - Menetapkan batas pengeluaran per kategori per periode (Mingguan, Bulanan, Tahunan).
+   - Bar progress visual real-time yang memperingatkan jika anggaran mendekati atau melebihi batas.
+2. Target Tabungan (Saving Goals):
+   - Pencatatan target tabungan dengan target nominal, nominal terkumpul saat ini, lokasi simpanan (Bank, Cash, Reksadana/Investasi), serta batas waktu (Deadline).
+3. Neraca Saldo (Balance Sheet):
+   - Pemetaan saldo riil yang terbagi antara Kas Tunai (Cash), Rekening Bank, dan Portofolio Investasi.
+
+D. Analisis & Statistik:
+- Donut & Bar Charts: Visualisasi perbandingan kategori pengeluaran dan pemasukan.
+- Mode Grafik Ganda: Mode "Detail" (per sub-kategori) vs Mode "Grouped" (per grup induk kategori).
+- Filter Waktu Luas: Hari ini, Minggu ini, Bulan ini, Tahun ini, atau Rentang Tanggal Kustom.
+- Multi-Currency Real-Time: Konversi otomatis saldo dan laporan ke mata uang IDR, USD, EUR, atau JPY menggunakan API kurs live.
+- Mode Cetak / PDF: Pratinjau bersih khusus cetak untuk arsip fisik atau laporan bulanan.
+- Sinkronisasi Google Sheets: Ekspor data transaksi langsung ke spreadsheet Google Workspace.
+
+---
+
+### 3. MENU UTAMA 3: CATATAN TERPADU (NOTES OS)
+Pusat dokumentasi kehidupan yang dibagi menjadi 7 sub-modul spesifik:
+
+1. Catatan Biasa (Normal Notes):
+   - Teks catatan serbaguna dengan judul, isi catatan, format Markdown, dan pencarian instan.
+2. Catatan Instagram (IG Notes):
+   - Terinspirasi dari fitur IG Notes: berisi nama pemilik (owner), judul lagu yang sedang didengarkan, pesan singkat, dan pilihan warna latar belakang yang estetik.
+   - Fitur History: Menyimpan riwayat perubahan status IG note sebelumnya.
+3. Catatan Pribadi & Brankas Data (Personal Vault Notes):
+   - Dilindungi keamanan PIN Lock khusus sebelum data bisa dibuka.
+   - Templat data identitas pribadi (NIK, Nama Lengkap, Alamat, Kode Pos, No. Rekening, Email) serta fleksibilitas menambah Custom Key-Value fields tak terbatas.
+4. Catatan Olahraga (Workout Notes):
+   - Pencatatan sesi gym/fitness dengan kategori latihan, durasi olahraga (menit), dan tabel detail per gerakan (Nama Gerakan, Jumlah Sets, Jumlah Reps, Beban/Weight dalam kg/lbs, serta catatan teknis).
+5. Target Harian (Daily Goals):
+   - To-do list harian berbasis tanggal.
+   - Dilengkapi kategori tugas dan checklist selesai/belum dengan persentase bar ketercapaian harian.
+6. Pelacak Qadha Shalat (Missed Prayers Tracker):
+   - Fitur ibadah khusus untuk mencatat dan melunasi hutang shalat fardhu (Subuh, Dzuhur, Ashar, Maghrib, Isya).
+   - Counter penambahan hutang shalat, status penyelesaian satu per satu, dan tanggal pelunasan.
+7. Pelacak Rutinitas Harian (Routine Tracker / Habit Matrix):
+   - Pencatatan kebiasaan berulang (cth: Baca Buku, Minum Air 2L, Meditasi).
+   - Kalender matriks mingguan/bulanan interaktif: pengguna cukup mengklik tanggal untuk menandai centang hijau ketercapaian setiap aktivitas.
+
+---
+
+### 4. MENU UTAMA 4: PERJALANAN (TRIPS & LIVE TRACKING)
+Sistem pemantauan rute perjalanan darat/kendaraan pribadi:
+1. Mulai Perjalanan (Start Trip):
+   - Memilih lokasi asal (Kota & Alamat Detail), lokasi tujuan, serta jenis kendaraan (Mobil/Motor).
+   - Tersedia templat perjalanan favorit untuk keberangkatan rutin.
+2. Pelacakan Aktif (Live Tracking & Maps):
+   - Terintegrasi dengan Google Maps Platform dan Geocoding API.
+   - Stopwatch/timer berjalan otomatis menghitung durasi perjalanan.
+   - Notifikasi push di browser yang terus memberi update status perjalanan.
+3. Selesai Perjalanan (End Trip Dialog):
+   - Form penutupan perjalanan: pengisian biaya Tol, biaya Bahan Bakar (Bensin), upload foto bukti/struk transaksi, dan catatan kondisi perjalanan (misal: Hujan, Macet, Lancar).
+   - Integrasi Otomatis ke Keuangan: Biaya bensin dan tol yang diinput di trip otomatis masuk sebagai pengeluaran baru di menu Keuangan tanpa perlu input ulang manual.
+4. Riwayat & Peta Rute:
+   - Arsip seluruh perjalanan yang telah selesai, lengkap dengan rincian biaya, durasi, dan visualisasi peta interaktif.
+
+---
+
+### 5. MENU UTAMA 5: DOKUMEN & AI OCR (DOCS VAULT)
+Tempat penyimpanan dan ekstraksi berkas digital penting:
+1. Upload & Penyimpanan Cloud:
+   - Drag-and-drop file gambar dokumen, invoice, kwitansi, atau sertifikat ke Firebase Storage / Firestore.
+   - Kompresi gambar cerdas di sisi klien (Client-side Image Compression) agar hemat penyimpanan dan cepat dimuat.
+2. AI OCR & Document Summarizer:
+   - Ekstraksi teks cerdas berbasis Gemini Vision.
+   - Mengubah tulisan di foto dokumen atau struk belanja fisik menjadi teks rapi dan ringkasan isi dokumen dalam Bahasa Indonesia.
+3. Galeri & Viewer:
+   - Galeri berkas dengan tanggal upload, pratinjau gambar, dan pembaca teks Markdown hasil ekstraksi OCR.

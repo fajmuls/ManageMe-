@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+  
+  h1, h2, h3, h4, h5, h6, .font-display {
+    font-family: 'Bricolage Grotesque', 'Plus Jakarta Sans', sans-serif;
+  }
+}
+
+/* Pop Comic Halftone Background & Custom Pattern */
+.bg-halftone {
+  background-image: radial-gradient(#000000 15%, transparent 16%);
+  background-size: 16px 16px;
+  background-position: 0 0;
+  opacity: 0.04;
+}
+
+.bg-comic-dots {
+  background-image: radial-gradient(#FFD000 20%, transparent 20%), radial-gradient(#FF4B82 20%, transparent 20%);
+  background-size: 20px 20px;
+  background-position: 0 0, 10px 10px;
+  opacity: 0.15;
+}
+
+/* Pop Comic Box Shadow Utilities */
+.comic-shadow-sm {
+  box-shadow: 2px 2px 0px 0px #000000;
+}
+
+.comic-shadow {
+  box-shadow: 4px 4px 0px 0px #000000;
+}
+
+.comic-shadow-lg {
+  box-shadow: 6px 6px 0px 0px #000000;
+}
+
+.comic-shadow-xl {
+  box-shadow: 8px 8px 0px 0px #000000;
+}
+
+.comic-shadow-cyan {
+  box-shadow: 5px 5px 0px 0px #00E5FF;
+}
+
+.comic-shadow-pink {
+  box-shadow: 5px 5px 0px 0px #FF4B82;
+}
+
+.comic-shadow-yellow {
+  box-shadow: 5px 5px 0px 0px #FFD000;
+}
+
+/* Button micro bounce transitions */
+.comic-button {
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.comic-button:hover:not(:disabled) {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px 0px #000000;
+}
+
+.comic-button:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0px 0px #000000;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #FFFDF6;
+  border-left: 2px solid #000;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #FFD000;
+  border: 2px solid #000;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #FF4B82;
+}
