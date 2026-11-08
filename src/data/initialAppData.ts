@@ -5,12 +5,12 @@ import {
 } from '../types/kosman';
 
 export const INITIAL_APP_VERSIONS: AppVersionState = {
-  hub: '2.0.0',
-  kosman: '2.0.0',
-  finance: '2.0.0',
-  activities: '2.0.0',
-  notes: '2.0.0',
-  worship: '2.0.0'
+  hub: '2.2.0',
+  kosman: '2.2.0',
+  finance: '2.2.0',
+  activities: '2.2.0',
+  notes: '2.2.0',
+  worship: '2.2.0'
 };
 
 // Initial Finance Records (Zero-state: nol transaksi sesuai permintaan)

@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { FinanceRecord, SavingGoal, Budget, KosItem } from '../types/kosman';
 import { 
-  IconWallet, IconPlus, IconTrash, IconSearch, IconArrowRight, 
-  IconCheck, IconDownload, IconSheet, IconAlert 
+  IconWallet, IconPlus, IconTrash, IconSearch, 
+  IconCheck, IconSheet, IconCamera, IconReceipt, IconSparkles 
 } from './icons/SvgIcons';
+import { autoSyncFinanceToSheets } from '../services/googleSheetsAutoSync';
 
 interface FinanceViewProps {
   records: FinanceRecord[];
@@ -35,6 +36,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSavingModal, setShowSavingModal] = useState(false);
+  const [isOcrProcessing, setIsOcrProcessing] = useState(false);
 
   // Form State for Add Transaction
   const [formData, setFormData] = useState({
@@ -98,18 +100,26 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       .sort((a, b) => b.createdAt - a.createdAt);
   }, [records, filterType, searchQuery]);
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(formData.amount);
     if (isNaN(amt) || amt <= 0) return;
 
-    onAddRecord({
+    const newRecData = {
       type: formData.type,
       amount: amt,
       category: formData.category,
       note: formData.note.trim() || (formData.type === 'income' ? 'Pemasukan' : 'Pengeluaran'),
       account: formData.account,
       date: formData.date
+    };
+
+    onAddRecord(newRecData);
+
+    // Auto-sync to Google Sheets in real-time
+    autoSyncFinanceToSheets({
+      id: 'fin-' + Date.now(),
+      ...newRecData
     });
 
     setFormData({
@@ -121,6 +131,45 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       date: new Date().toISOString().split('T')[0]
     });
     setShowAddModal(false);
+  };
+
+  const handleScanReceipt = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsOcrProcessing(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64 = event.target?.result as string;
+        const res = await fetch('/api/gemini/ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: base64, mimeType: file.type }),
+        });
+        const data = await res.json();
+        if (data.success && data.data) {
+          const ocr = data.data;
+          setFormData({
+            type: 'expense',
+            amount: ocr.totalAmount ? ocr.totalAmount.toString() : '',
+            category: ocr.category || 'Belanja KosMan',
+            note: ocr.note || ocr.storeName || 'Struk Belanja AI OCR',
+            account: 'Kas',
+            date: ocr.date || new Date().toISOString().split('T')[0]
+          });
+          setShowAddModal(true);
+        } else {
+          alert('Tidak dapat mengekstrak data dari nota ini.');
+        }
+        setIsOcrProcessing(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error(err);
+      alert('Terjadi kesalahan saat memproses gambar nota.');
+      setIsOcrProcessing(false);
+    }
   };
 
   const handleSavingSubmit = (e: React.FormEvent) => {
@@ -148,112 +197,98 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6">
+    <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-3 space-y-3">
       
-      {/* Top Banner / Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4">
+      {/* Top Summary Cards (Fit-Screen & Ultra Compact) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         
-        {/* Total Saldo */}
-        <div className="bg-[#FFD000] border-2 sm:border-3 border-black p-3 sm:p-4 rounded-xl sm:rounded-2xl comic-shadow">
-          <span className="text-[10px] sm:text-xs font-black uppercase text-black block">Total Saldo Bersih</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="font-display font-black text-lg sm:text-2xl text-black font-mono truncate">
-              Rp {stats.totalBalance.toLocaleString('id-ID')}
-            </span>
+        <div className="bg-[#FFD000] border border-black p-2.5 rounded-lg shadow-[2px_2px_0px_#000]">
+          <span className="text-[10px] font-black uppercase text-black block">Total Saldo Bersih</span>
+          <div className="text-sm sm:text-lg font-black font-mono text-black truncate mt-0.5">
+            Rp {stats.totalBalance.toLocaleString('id-ID')}
           </div>
-          <span className="text-[9px] sm:text-[11px] font-bold text-slate-800 block mt-1">
+          <span className="text-[9px] font-bold text-slate-800 block mt-0.5 truncate">
             Kas: {stats.kas.toLocaleString('id-ID')} · Bank: {stats.bank.toLocaleString('id-ID')}
           </span>
         </div>
 
-        {/* Total Pemasukan */}
-        <div className="bg-[#A3E635] border-2 sm:border-3 border-black p-3 sm:p-4 rounded-xl sm:rounded-2xl comic-shadow">
-          <span className="text-[10px] sm:text-xs font-black uppercase text-black block">Total Pemasukan</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="font-display font-black text-lg sm:text-2xl text-black font-mono truncate">
-              +Rp {stats.totalIncome.toLocaleString('id-ID')}
-            </span>
+        <div className="bg-[#A3E635] border border-black p-2.5 rounded-lg shadow-[2px_2px_0px_#000]">
+          <span className="text-[10px] font-black uppercase text-black block">Pemasukan</span>
+          <div className="text-sm sm:text-lg font-black font-mono text-black truncate mt-0.5">
+            +Rp {stats.totalIncome.toLocaleString('id-ID')}
           </div>
-          <span className="text-[9px] sm:text-[11px] font-bold text-slate-800 block mt-1">
+          <span className="text-[9px] font-bold text-slate-800 block mt-0.5">
             {records.filter(r => r.type === 'income').length} Transaksi Masuk
           </span>
         </div>
 
-        {/* Total Pengeluaran */}
-        <div className="bg-[#FF4B82] text-white border-2 sm:border-3 border-black p-3 sm:p-4 rounded-xl sm:rounded-2xl comic-shadow">
-          <span className="text-[10px] sm:text-xs font-black uppercase block">Total Pengeluaran</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="font-display font-black text-lg sm:text-2xl font-mono truncate">
-              -Rp {stats.totalExpense.toLocaleString('id-ID')}
-            </span>
+        <div className="bg-[#FF4B82] text-white border border-black p-2.5 rounded-lg shadow-[2px_2px_0px_#000]">
+          <span className="text-[10px] font-black uppercase text-white block">Pengeluaran</span>
+          <div className="text-sm sm:text-lg font-black font-mono text-white truncate mt-0.5">
+            -Rp {stats.totalExpense.toLocaleString('id-ID')}
           </div>
-          <span className="text-[9px] sm:text-[11px] font-bold text-white/90 block mt-1">
+          <span className="text-[9px] font-bold text-white/90 block mt-0.5">
             {records.filter(r => r.type === 'expense').length} Transaksi Keluar
           </span>
         </div>
 
-        {/* Net Cashflow */}
-        <div className="bg-[#00E5FF] border-2 sm:border-3 border-black p-3 sm:p-4 rounded-xl sm:rounded-2xl comic-shadow">
-          <span className="text-[10px] sm:text-xs font-black uppercase text-black block">Net Cashflow</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="font-display font-black text-lg sm:text-2xl text-black font-mono truncate">
-              Rp {stats.netCashflow.toLocaleString('id-ID')}
-            </span>
+        <div className="bg-[#00E5FF] border border-black p-2.5 rounded-lg shadow-[2px_2px_0px_#000]">
+          <span className="text-[10px] font-black uppercase text-black block">Cashflow Bersih</span>
+          <div className={`text-sm sm:text-lg font-black font-mono truncate mt-0.5 ${stats.netCashflow >= 0 ? 'text-black' : 'text-red-700'}`}>
+            Rp {stats.netCashflow.toLocaleString('id-ID')}
           </div>
-          <span className="text-[9px] sm:text-[11px] font-bold text-slate-800 block mt-1">
-            {stats.netCashflow >= 0 ? 'Surplus Aman' : 'Defisit - Cek Belanja'}
+          <span className="text-[9px] font-bold text-slate-800 block mt-0.5">
+            Surplus & Alokasi
           </span>
         </div>
 
       </div>
 
-      {/* Tab Switcher & Action Toolbar */}
-      <div className="bg-white border-2 sm:border-3 border-black p-3 sm:p-4 rounded-xl sm:rounded-2xl comic-shadow space-y-3">
-        
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+      {/* Toolbar & Action Controls */}
+      <div className="bg-white border border-black p-2.5 rounded-xl shadow-[2px_2px_0px_#000] space-y-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
           
           {/* Sub Tabs */}
-          <div className="flex items-center gap-1 bg-[#FFFDF6] border sm:border-2 border-black p-1 rounded-xl">
+          <div className="flex items-center gap-1 bg-[#FFFDF6] border border-black p-0.5 rounded-lg">
             <button
               onClick={() => setActiveTab('transaksi')}
-              className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                activeTab === 'transaksi'
-                  ? 'bg-[#FFD000] text-black border border-black shadow-[1px_1px_0px_#000]'
-                  : 'text-slate-700 hover:text-black'
+              className={`px-2 py-1 rounded-md text-[11px] font-black transition-all ${
+                activeTab === 'transaksi' ? 'bg-[#FFD000] text-black shadow-[1px_1px_0px_#000]' : 'text-slate-700'
               }`}
             >
               Transaksi ({records.length})
             </button>
             <button
               onClick={() => setActiveTab('tabungan')}
-              className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                activeTab === 'tabungan'
-                  ? 'bg-[#00E5FF] text-black border border-black shadow-[1px_1px_0px_#000]'
-                  : 'text-slate-700 hover:text-black'
+              className={`px-2 py-1 rounded-md text-[11px] font-black transition-all ${
+                activeTab === 'tabungan' ? 'bg-[#00E5FF] text-black shadow-[1px_1px_0px_#000]' : 'text-slate-700'
               }`}
             >
               Tabungan ({savings.length})
             </button>
             <button
               onClick={() => setActiveTab('budget')}
-              className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                activeTab === 'budget'
-                  ? 'bg-[#A3E635] text-black border border-black shadow-[1px_1px_0px_#000]'
-                  : 'text-slate-700 hover:text-black'
+              className={`px-2 py-1 rounded-md text-[11px] font-black transition-all ${
+                activeTab === 'budget' ? 'bg-[#A3E635] text-black shadow-[1px_1px_0px_#000]' : 'text-slate-700'
               }`}
             >
               Budget ({budgets.length})
             </button>
           </div>
 
-          {/* Action Button */}
-          <div className="flex items-center gap-2">
+          {/* Actions: Scan Struk AI OCR & Manual Add */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <label className={`cursor-pointer bg-[#00E5FF] hover:bg-cyan-400 text-black px-2.5 py-1 rounded-lg border border-black font-black text-[11px] uppercase flex items-center justify-center gap-1 shadow-[1.5px_1.5px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 ${isOcrProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+              <IconCamera className="w-3.5 h-3.5" />
+              <span>{isOcrProcessing ? 'Memproses...' : 'Scan Nota (AI OCR)'}</span>
+              <input type="file" accept="image/*" capture="environment" onChange={handleScanReceipt} className="hidden" />
+            </label>
+
             {onOpenGoogleSheets && (
               <button
                 type="button"
                 onClick={onOpenGoogleSheets}
-                className="bg-[#10B981] text-white px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl border sm:border-2 border-black font-black text-xs uppercase flex items-center justify-center gap-1.5 shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5"
-                title="Sinkronkan transaksi ke Google Sheets"
+                className="bg-[#10B981] text-white px-2.5 py-1 rounded-lg border border-black font-black text-[11px] uppercase flex items-center justify-center gap-1 shadow-[1.5px_1.5px_0px_#000] active:translate-x-0.5 active:translate-y-0.5"
               >
                 <IconSheet className="w-3.5 h-3.5" />
                 <span>Google Sheets</span>
@@ -263,196 +298,147 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             {activeTab === 'transaksi' && (
               <button
                 onClick={() => setShowAddModal(true)}
-                className="comic-button bg-[#FF4B82] text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl border sm:border-2 border-black font-black text-xs uppercase flex items-center justify-center gap-1.5 comic-shadow-sm w-full sm:w-auto"
+                className="bg-[#FF4B82] text-white px-3 py-1 rounded-lg border border-black font-black text-[11px] uppercase flex items-center justify-center gap-1 shadow-[1.5px_1.5px_0px_#000] active:translate-x-0.5 active:translate-y-0.5"
               >
                 <IconPlus className="w-3.5 h-3.5" />
-                Catat Transaksi
-              </button>
-            )}
-
-            {activeTab === 'tabungan' && (
-              <button
-                onClick={() => setShowSavingModal(true)}
-                className="comic-button bg-[#00E5FF] text-black px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl border sm:border-2 border-black font-black text-xs uppercase flex items-center justify-center gap-1.5 comic-shadow-sm w-full sm:w-auto"
-              >
-                <IconPlus className="w-3.5 h-3.5" />
-                Tambah Target Tabungan
+                Tambah
               </button>
             )}
           </div>
-
         </div>
 
-        {/* Filter Controls for Transaksi */}
+        {/* Filter and Search */}
         {activeTab === 'transaksi' && (
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-slate-100">
+          <div className="flex items-center gap-2 pt-1 border-t border-slate-200">
             <div className="relative flex-1">
-              <IconSearch className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <IconSearch className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1.5" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari transaksi: sewa kos, makan, token..."
-                className="w-full pl-9 pr-3 py-1.5 sm:py-2 bg-[#FFFDF6] border-2 border-black rounded-xl font-bold text-xs focus:outline-none focus:ring-2 focus:ring-[#FFD000]"
+                placeholder="Cari transaksi..."
+                className="w-full pl-8 pr-3 py-1 border border-black rounded-lg text-xs font-bold bg-[#FFFDF6]"
               />
             </div>
 
-            <div className="flex items-center gap-1.5 overflow-x-auto">
-              <button
-                onClick={() => setFilterType('all')}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border-2 border-black transition-all ${
-                  filterType === 'all' ? 'bg-[#FFD000] text-black' : 'bg-white text-slate-700'
-                }`}
-              >
-                Semua
-              </button>
-              <button
-                onClick={() => setFilterType('income')}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border-2 border-black transition-all ${
-                  filterType === 'income' ? 'bg-[#A3E635] text-black' : 'bg-white text-slate-700'
-                }`}
-              >
-                + Masuk
-              </button>
-              <button
-                onClick={() => setFilterType('expense')}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border-2 border-black transition-all ${
-                  filterType === 'expense' ? 'bg-[#FF4B82] text-white' : 'bg-white text-slate-700'
-                }`}
-              >
-                - Keluar
-              </button>
+            <div className="flex items-center gap-1 text-[10px] font-bold">
+              {(['all', 'income', 'expense'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setFilterType(t)}
+                  className={`px-2 py-0.5 rounded border border-black capitalize ${
+                    filterType === t ? 'bg-black text-white' : 'bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  {t === 'all' ? 'Semua' : t === 'income' ? 'Masuk' : 'Keluar'}
+                </button>
+              ))}
             </div>
           </div>
         )}
-
       </div>
 
-      {/* Main Tab Content */}
+      {/* TAB 1: Transaksi List */}
       {activeTab === 'transaksi' && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-700 uppercase px-1">
-            <span>Daftar Riwayat ({filteredRecords.length} Catatan)</span>
-            <span>Urut Terbaru</span>
-          </div>
-
+        <div className="space-y-2">
           {filteredRecords.length === 0 ? (
-            <div className="bg-white border-2 sm:border-3 border-black rounded-xl sm:rounded-2xl p-8 text-center comic-shadow space-y-2">
-              <span className="text-3xl">💸</span>
-              <h4 className="font-display font-black text-base text-black uppercase">Belum ada transaksi ditemukan</h4>
-              <p className="text-xs font-bold text-slate-600">Klik "Catat Transaksi" untuk menambahkan catatan baru.</p>
+            <div className="bg-white border-2 border-dashed border-slate-300 rounded-xl p-6 text-center space-y-2">
+              <div className="w-10 h-10 bg-slate-100 border border-black rounded-full flex items-center justify-center mx-auto text-slate-700">
+                <IconWallet className="w-5 h-5" />
+              </div>
+              <h4 className="font-black text-xs text-black">Belum Ada Transaksi Keuangan</h4>
+              <p className="text-[10px] font-bold text-slate-500">
+                Mulai catat pengeluaran harian atau scan foto nota struk belanja dengan Gemini AI.
+              </p>
             </div>
           ) : (
-            <div className="bg-white border-2 sm:border-3 border-black rounded-xl sm:rounded-2xl comic-shadow overflow-hidden">
-              <div className="divide-y divide-black">
-                {filteredRecords.map(item => {
-                  const isIncome = item.type === 'income';
-                  return (
-                    <div 
-                      key={item.id} 
-                      className="p-3 sm:p-4 flex items-center justify-between gap-2 sm:gap-4 hover:bg-slate-50 transition-colors"
-                    >
-                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                        <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl border-2 border-black flex items-center justify-center font-black text-sm shrink-0 ${
-                          isIncome ? 'bg-[#A3E635] text-black' : 'bg-[#FF4B82] text-white'
-                        }`}>
-                          {isIncome ? '+' : '-'}
-                        </div>
-
-                        <div className="min-w-0">
-                          <span className="font-bold text-xs sm:text-sm text-black block truncate">
-                            {item.note}
-                          </span>
-                          <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-slate-500 font-bold mt-0.5">
-                            <span className="bg-[#FFFDF6] border border-black px-1.5 py-0.2 rounded text-[10px] text-slate-800">
-                              {item.category}
-                            </span>
-                            <span>·</span>
-                            <span>{item.account}</span>
-                            <span>·</span>
-                            <span className="font-mono">{item.date}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                        <span className={`font-mono font-black text-xs sm:text-base ${
-                          isIncome ? 'text-green-700' : 'text-red-600'
-                        }`}>
-                          {isIncome ? '+' : '-'}Rp {item.amount.toLocaleString('id-ID')}
-                        </span>
-
-                        <button
-                          onClick={() => onDeleteRecord(item.id)}
-                          className="p-1 sm:p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Hapus Transaksi"
-                        >
-                          <IconTrash className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                        </button>
-                      </div>
+            <div className="space-y-1.5">
+              {filteredRecords.map(r => (
+                <div 
+                  key={r.id} 
+                  className={`bg-white border border-black p-2.5 rounded-lg flex items-center justify-between gap-2 shadow-[1.5px_1.5px_0px_#000] ${
+                    r.type === 'income' ? 'border-l-4 border-l-[#A3E635]' : 'border-l-4 border-l-[#FF4B82]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className={`w-7 h-7 rounded-md border border-black flex items-center justify-center shrink-0 text-xs font-black ${
+                      r.type === 'income' ? 'bg-[#A3E635] text-black' : 'bg-[#FF4B82] text-white'
+                    }`}>
+                      {r.type === 'income' ? '+' : '-'}
                     </div>
-                  );
-                })}
-              </div>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-black text-xs text-black truncate">{r.note}</span>
+                        <span className="bg-[#FFFDF6] border border-black text-[9px] font-bold px-1 rounded text-slate-700 shrink-0">
+                          {r.category}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-slate-400 block">
+                        {r.date} · {r.account}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`font-mono font-black text-xs sm:text-sm ${
+                      r.type === 'income' ? 'text-green-700' : 'text-red-600'
+                    }`}>
+                      {r.type === 'income' ? '+' : '-'}Rp {r.amount.toLocaleString('id-ID')}
+                    </span>
+                    <button
+                      onClick={() => onDeleteRecord(r.id)}
+                      className="text-slate-400 hover:text-red-600 p-1"
+                      title="Hapus Transaksi"
+                    >
+                      <IconTrash className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
       )}
 
-      {/* Tab Tabungan Impian */}
+      {/* TAB 2: Tabungan */}
       {activeTab === 'tabungan' && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-3">
+          <div className="flex justify-between items-center bg-white border border-black p-3 rounded-lg shadow-[2px_2px_0px_#000]">
+            <div>
+              <h3 className="font-black text-xs text-black uppercase">Target Tabungan Impian</h3>
+              <p className="text-[10px] font-bold text-slate-500">Sisihkan kiriman untuk tabungan darurat & gadget</p>
+            </div>
+            <button
+              onClick={() => setShowSavingModal(true)}
+              className="bg-[#00E5FF] text-black px-2.5 py-1 border border-black rounded-lg font-black text-[11px] uppercase shadow-[1.5px_1.5px_0px_#000]"
+            >
+              + Target Baru
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {savings.map(goal => {
               const progress = Math.min(100, Math.round((goal.currentAmount / goal.targetAmount) * 100));
               return (
-                <div key={goal.id} className="bg-white border-2 sm:border-3 border-black rounded-xl sm:rounded-2xl p-4 sm:p-5 comic-shadow space-y-3">
-                  <div className="flex items-start justify-between">
+                <div key={goal.id} className="bg-white border border-black rounded-lg p-3 space-y-2 shadow-[2px_2px_0px_#000]">
+                  <div className="flex justify-between items-start">
                     <div>
-                      <h4 className="font-display font-black text-base sm:text-lg text-black uppercase">{goal.name}</h4>
-                      <span className="text-[10px] font-bold bg-[#FFFDF6] border border-black px-2 py-0.5 rounded text-slate-700">
-                        Lokasi: {goal.location} {goal.deadline ? `· Deadline: ${goal.deadline}` : ''}
-                      </span>
+                      <h4 className="font-black text-xs text-black">{goal.name}</h4>
+                      <span className="text-[9px] font-bold text-slate-500 font-mono">{goal.location}</span>
                     </div>
-
-                    <button
-                      onClick={() => onDeleteSaving(goal.id)}
-                      className="text-slate-400 hover:text-red-600 p-1"
-                      title="Hapus Tabungan"
-                    >
-                      <IconTrash className="w-4 h-4" />
+                    <button onClick={() => onDeleteSaving(goal.id)} className="text-slate-400 hover:text-red-600">
+                      <IconTrash className="w-3.5 h-3.5" />
                     </button>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-xs font-bold font-mono">
-                      <span>Terkumpul: Rp {goal.currentAmount.toLocaleString('id-ID')}</span>
-                      <span className="text-slate-500">Target: Rp {goal.targetAmount.toLocaleString('id-ID')}</span>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] font-mono font-bold">
+                      <span>Rp {goal.currentAmount.toLocaleString('id-ID')}</span>
+                      <span className="text-slate-500">Rp {goal.targetAmount.toLocaleString('id-ID')}</span>
                     </div>
-
-                    <div className="w-full bg-slate-100 border-2 border-black h-4 rounded-full overflow-hidden p-0.5">
-                      <div 
-                        className="bg-[#A3E635] h-full rounded-full transition-all border border-black" 
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-
-                    <div className="flex justify-between items-center text-[11px] font-bold">
-                      <span className="text-slate-600">{progress}% Tercapai</span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => onUpdateSaving(goal.id, goal.currentAmount + 50000)}
-                          className="px-2 py-0.5 bg-[#FFD000] border border-black rounded text-[10px] font-black uppercase hover:bg-yellow-400"
-                        >
-                          +50rb
-                        </button>
-                        <button
-                          onClick={() => onUpdateSaving(goal.id, goal.currentAmount + 100000)}
-                          className="px-2 py-0.5 bg-[#00E5FF] border border-black rounded text-[10px] font-black uppercase hover:bg-cyan-400"
-                        >
-                          +100rb
-                        </button>
-                      </div>
+                    <div className="w-full bg-slate-100 border border-black h-2.5 rounded-full overflow-hidden">
+                      <div className="bg-[#A3E635] h-full transition-all" style={{ width: `${progress}%` }} />
                     </div>
                   </div>
                 </div>
@@ -462,46 +448,41 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
       )}
 
-      {/* Tab Budget & Batas Bulanan */}
+      {/* TAB 3: Budget */}
       {activeTab === 'budget' && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {budgets.map(b => (
-              <div key={b.id} className="bg-white border-2 sm:border-3 border-black rounded-xl sm:rounded-2xl p-4 comic-shadow space-y-2">
-                <span className="text-[10px] font-black uppercase bg-[#FFFDF6] border border-black px-2 py-0.5 rounded text-black">
-                  {b.period}
-                </span>
-                <h4 className="font-display font-black text-base text-black uppercase">{b.category}</h4>
-                <div className="text-lg font-black font-mono text-[#FF4B82]">
-                  Rp {b.amount.toLocaleString('id-ID')}
-                </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {budgets.map(b => (
+            <div key={b.id} className="bg-white border border-black rounded-lg p-3 shadow-[2px_2px_0px_#000] space-y-1">
+              <span className="text-[9px] font-black uppercase bg-[#FFFDF6] border border-black px-1.5 py-0.2 rounded text-black">
+                {b.period}
+              </span>
+              <h4 className="font-black text-xs text-black uppercase">{b.category}</h4>
+              <div className="text-sm font-black font-mono text-[#FF4B82]">
+                Rp {b.amount.toLocaleString('id-ID')}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Add Transaction Modal */}
+      {/* Add Transaction Modal (Fit-Screen Compact) */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white border-2 sm:border-3 border-black rounded-2xl p-4 sm:p-6 comic-shadow-xl max-w-md w-full space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3">
+          <div className="bg-white border-2 border-black rounded-xl p-4 shadow-[5px_5px_0px_#000] max-w-sm w-full space-y-3 max-h-[90vh] overflow-y-auto">
             
-            <div className="flex items-center justify-between border-b-2 border-black pb-2.5">
-              <h3 className="font-display font-black text-lg uppercase text-black">
-                CATAT TRANSAKSI KEUANGAN
-              </h3>
-              <button onClick={() => setShowAddModal(false)} className="font-bold text-slate-500 hover:text-black">✕</button>
+            <div className="flex items-center justify-between border-b border-black pb-2">
+              <h3 className="font-black text-sm uppercase text-black">CATAT TRANSAKSI KEUANGAN</h3>
+              <button onClick={() => setShowAddModal(false)} className="font-bold text-xs">✕</button>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="space-y-3 text-xs font-bold">
+            <form onSubmit={handleFormSubmit} className="space-y-2.5 text-xs font-bold">
               
-              {/* Type Switcher */}
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, type: 'expense' })}
-                  className={`py-2 rounded-xl border-2 border-black font-black uppercase transition-all ${
-                    formData.type === 'expense' ? 'bg-[#FF4B82] text-white shadow-[2px_2px_0px_#000]' : 'bg-slate-50 text-slate-700'
+                  className={`py-1.5 rounded-lg border border-black font-black uppercase text-xs ${
+                    formData.type === 'expense' ? 'bg-[#FF4B82] text-white shadow-[1.5px_1.5px_0px_#000]' : 'bg-slate-100 text-slate-700'
                   }`}
                 >
                   - Pengeluaran
@@ -509,8 +490,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, type: 'income' })}
-                  className={`py-2 rounded-xl border-2 border-black font-black uppercase transition-all ${
-                    formData.type === 'income' ? 'bg-[#A3E635] text-black shadow-[2px_2px_0px_#000]' : 'bg-slate-50 text-slate-700'
+                  className={`py-1.5 rounded-lg border border-black font-black uppercase text-xs ${
+                    formData.type === 'income' ? 'bg-[#A3E635] text-black shadow-[1.5px_1.5px_0px_#000]' : 'bg-slate-100 text-slate-700'
                   }`}
                 >
                   + Pemasukan
@@ -519,7 +500,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-slate-700 uppercase">Nominal (IDR) *</label>
+                  <label className="text-slate-700 uppercase text-[10px]">Nominal (IDR) *</label>
                   <div className="flex items-center gap-1">
                     {[10000, 20000, 50000, 100000].map(addVal => (
                       <button
@@ -529,18 +510,11 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                           const cur = parseFloat(formData.amount) || 0;
                           setFormData({ ...formData, amount: (cur + addVal).toString() });
                         }}
-                        className="text-[10px] font-bold bg-[#FFD000] hover:bg-yellow-400 border border-black px-1.5 py-0.5 rounded shadow-[1px_1px_0px_#000]"
+                        className="text-[9px] font-bold bg-[#FFD000] border border-black px-1.5 py-0.2 rounded"
                       >
                         +{addVal / 1000}k
                       </button>
                     ))}
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, amount: '' })}
-                      className="text-[10px] font-bold bg-slate-200 hover:bg-slate-300 border border-black px-1.5 py-0.5 rounded shadow-[1px_1px_0px_#000]"
-                    >
-                      C
-                    </button>
                   </div>
                 </div>
                 <input
@@ -550,22 +524,14 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   step="500"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  placeholder="Contoh: 50000"
-                  className="w-full px-3 py-2 border-2 border-black rounded-xl font-mono text-base font-black focus:outline-none focus:ring-2 focus:ring-[#FFD000]"
+                  placeholder="50000"
+                  className="w-full px-2.5 py-1.5 border border-black rounded-lg font-mono text-sm font-black"
                 />
               </div>
 
-              {/* KosMan Item Auto-Sync Shortcut (If Expense) */}
               {formData.type === 'expense' && kosItems.length > 0 && (
-                <div className="p-2.5 bg-[#00E5FF]/20 border-2 border-black rounded-xl space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-black text-black uppercase flex items-center gap-1">
-                      <span>📦 Pilih Item KosMan (Auto-Sync Stok)</span>
-                    </label>
-                    <span className="text-[9px] font-bold bg-black text-white px-1.5 py-0.2 rounded">
-                      Sync Aktif
-                    </span>
-                  </div>
+                <div className="p-2 bg-[#00E5FF]/20 border border-black rounded-lg space-y-1 text-[10px]">
+                  <span className="font-black text-black">📦 Auto-Sync Barang KosMan:</span>
                   <select
                     onChange={(e) => {
                       const selected = kosItems.find(item => item.id === e.target.value);
@@ -579,28 +545,25 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                       }
                     }}
                     defaultValue=""
-                    className="w-full px-2 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white cursor-pointer"
+                    className="w-full px-2 py-1 border border-black rounded font-bold text-[10px] bg-white cursor-pointer"
                   >
-                    <option value="" disabled>-- Pilih Barang Kosan untuk Sinkronisasi Otomatis --</option>
+                    <option value="" disabled>-- Pilih Item Kosan --</option>
                     {kosItems.slice(0, 40).map(item => (
                       <option key={item.id} value={item.id}>
                         {item.name} ({item.category}) — Rp {item.price.toLocaleString('id-ID')}
                       </option>
                     ))}
                   </select>
-                  <p className="text-[10px] font-bold text-slate-700">
-                    Otomatis menambah +1 stok dan akumulasi pengeluaran di KosMan saat disimpan.
-                  </p>
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-slate-700 uppercase mb-1">Kategori</label>
+                  <label className="block text-slate-700 uppercase text-[10px] mb-1">Kategori</label>
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-2.5 py-2 border-2 border-black rounded-xl font-bold bg-white text-xs"
+                    className="w-full px-2 py-1.5 border border-black rounded-lg font-bold bg-white text-xs"
                   >
                     <option value="Makan & Minum">Makan & Minum</option>
                     <option value="Belanja KosMan">Belanja KosMan</option>
@@ -614,148 +577,56 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 uppercase mb-1">Akun Pembayaran</label>
+                  <label className="block text-slate-700 uppercase text-[10px] mb-1">Akun Pembayaran</label>
                   <select
                     value={formData.account}
                     onChange={(e) => setFormData({ ...formData, account: e.target.value as any })}
-                    className="w-full px-2.5 py-2 border-2 border-black rounded-xl font-bold bg-white text-xs"
+                    className="w-full px-2 py-1.5 border border-black rounded-lg font-bold bg-white text-xs"
                   >
                     <option value="Kas">Kas (Tunai)</option>
                     <option value="Bank">Bank (Transfer)</option>
-                    <option value="E-Wallet">E-Wallet (GoPay/OVO/Dana)</option>
+                    <option value="E-Wallet">E-Wallet (GoPay/Dana)</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-700 uppercase mb-1">Catatan Keterangan</label>
+                <label className="block text-slate-700 uppercase text-[10px] mb-1">Catatan Keterangan</label>
                 <input
                   type="text"
                   value={formData.note}
                   onChange={(e) => setFormData({ ...formData, note: e.target.value })}
-                  placeholder="Misal: Beli makan siang, galon, token listrik"
-                  className="w-full px-3 py-2 border-2 border-black rounded-xl font-bold text-xs"
+                  placeholder="Keterangan transaksi..."
+                  className="w-full px-2.5 py-1.5 border border-black rounded-lg font-bold text-xs"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-700 uppercase mb-1">Tanggal</label>
+                <label className="block text-slate-700 uppercase text-[10px] mb-1">Tanggal</label>
                 <input
                   type="date"
                   value={formData.date}
                   onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  className="w-full px-3 py-2 border-2 border-black rounded-xl font-bold text-xs"
+                  className="w-full px-2.5 py-1.5 border border-black rounded-lg font-bold text-xs"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-black/10">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-3 py-1.5 border-2 border-black rounded-xl font-bold text-xs hover:bg-slate-100"
+                  className="px-3 py-1 border border-black rounded-lg font-bold text-xs"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="comic-button bg-[#FFD000] text-black px-4 py-1.5 border-2 border-black rounded-xl font-black text-xs uppercase"
+                  className="px-4 py-1 bg-[#FFD000] text-black border border-black rounded-lg font-black text-xs uppercase shadow-[1.5px_1.5px_0px_#000]"
                 >
-                  Simpan Transaksi
+                  Simpan
                 </button>
               </div>
 
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Add Saving Goal Modal */}
-      {showSavingModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white border-2 sm:border-3 border-black rounded-2xl p-4 sm:p-6 comic-shadow-xl max-w-md w-full space-y-4">
-            <div className="flex items-center justify-between border-b-2 border-black pb-2.5">
-              <h3 className="font-display font-black text-lg uppercase text-black">
-                TARGET TABUNGAN IMPIAN
-              </h3>
-              <button onClick={() => setShowSavingModal(false)} className="font-bold text-slate-500 hover:text-black">✕</button>
-            </div>
-
-            <form onSubmit={handleSavingSubmit} className="space-y-3 text-xs font-bold">
-              <div>
-                <label className="block text-slate-700 uppercase mb-1">Nama Tujuan Tabungan *</label>
-                <input
-                  type="text"
-                  required
-                  value={savingFormData.name}
-                  onChange={(e) => setSavingFormData({ ...savingFormData, name: e.target.value })}
-                  placeholder="Misal: Dana Darurat, HP Baru, Servis Motor"
-                  className="w-full px-3 py-2 border-2 border-black rounded-xl font-bold text-xs"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-slate-700 uppercase mb-1">Target Nominal (IDR) *</label>
-                  <input
-                    type="number"
-                    required
-                    min="1000"
-                    value={savingFormData.targetAmount}
-                    onChange={(e) => setSavingFormData({ ...savingFormData, targetAmount: e.target.value })}
-                    placeholder="Contoh: 3000000"
-                    className="w-full px-3 py-2 border-2 border-black rounded-xl font-mono text-xs font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 uppercase mb-1">Saldo Awal (IDR)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={savingFormData.currentAmount}
-                    onChange={(e) => setSavingFormData({ ...savingFormData, currentAmount: e.target.value })}
-                    placeholder="0"
-                    className="w-full px-3 py-2 border-2 border-black rounded-xl font-mono text-xs font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-slate-700 uppercase mb-1">Tempat Simpan</label>
-                  <input
-                    type="text"
-                    value={savingFormData.location}
-                    onChange={(e) => setSavingFormData({ ...savingFormData, location: e.target.value })}
-                    placeholder="Bank / Dompet / Celengan"
-                    className="w-full px-3 py-2 border-2 border-black rounded-xl font-bold text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 uppercase mb-1">Target Tanggal</label>
-                  <input
-                    type="date"
-                    value={savingFormData.deadline}
-                    onChange={(e) => setSavingFormData({ ...savingFormData, deadline: e.target.value })}
-                    className="w-full px-3 py-2 border-2 border-black rounded-xl font-bold text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setShowSavingModal(false)}
-                  className="px-3 py-1.5 border-2 border-black rounded-xl font-bold text-xs hover:bg-slate-100"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="comic-button bg-[#00E5FF] text-black px-4 py-1.5 border-2 border-black rounded-xl font-black text-xs uppercase"
-                >
-                  Simpan Target
-                </button>
-              </div>
             </form>
           </div>
         </div>

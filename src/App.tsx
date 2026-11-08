@@ -22,6 +22,7 @@ import { WorshipView } from './components/WorshipView';
 import { ChatGPTModal } from './components/ChatGPTModal';
 import { GoogleSheetsModal } from './components/GoogleSheetsModal';
 import { SettingsModal } from './components/SettingsModal';
+import { autoSyncFinanceToSheets, autoSyncKosmanToSheets, autoSyncActivityToSheets } from './services/googleSheetsAutoSync';
 
 // Clean zero-state reset for v2.0.0 requested by user (catalog quantity: 0, transactions: 0, routines: 0)
 const V2_CLEAN_RESET_KEY = 'manageme_v2_zero_state_applied';
@@ -282,10 +283,18 @@ export default function App() {
       totalSpend: 0,
     };
     setItems(prev => [newItem, ...prev]);
+    autoSyncKosmanToSheets(newItem);
   };
 
   const handleUpdateItem = (id: string, updates: Partial<KosItem>) => {
-    setItems(prev => prev.map(item => (item.id === id ? { ...item, ...updates } : item)));
+    setItems(prev => prev.map(item => {
+      if (item.id === id) {
+        const updated = { ...item, ...updates };
+        autoSyncKosmanToSheets(updated);
+        return updated;
+      }
+      return item;
+    }));
   };
 
   const handleDeleteItem = (id: string) => {
@@ -319,6 +328,7 @@ export default function App() {
       createdAt: Date.now()
     };
     setFinanceRecords(prev => [record, ...prev]);
+    autoSyncFinanceToSheets(record);
 
     // Auto-sync to KosMan items if it is an expense matching an item or Belanja KosMan
     if (newRec.type === 'expense') {
@@ -335,13 +345,15 @@ export default function App() {
             (lowerCat.includes('kosman') && lowerNote.includes(lowerName))
           ) {
             matched = true;
-            return {
+            const updatedItem = {
               ...item,
               quantity: (item.quantity || 0) + 1,
               timesPurchased: (item.timesPurchased || 0) + 1,
               totalSpend: (item.totalSpend || 0) + newRec.amount,
               lastPurchasedDate: newRec.date || new Date().toISOString().split('T')[0]
             };
+            autoSyncKosmanToSheets(updatedItem);
+            return updatedItem;
           }
           return item;
         });
@@ -431,6 +443,13 @@ export default function App() {
       id: 'trip-' + Date.now()
     };
     setTrips(prev => [newTrip, ...prev]);
+    autoSyncActivityToSheets({
+      id: newTrip.id,
+      date: newTrip.date,
+      type: 'Perjalanan',
+      title: `${newTrip.origin} ➔ ${newTrip.destination}`,
+      info: `Kendaraan: ${newTrip.vehicle}${newTrip.fuelCost ? `, BBM: Rp ${newTrip.fuelCost}` : ''}${newTrip.tollCost ? `, Tol: Rp ${newTrip.tollCost}` : ''}`
+    });
   };
 
   const handleAddWorkout = (workout: Omit<WorkoutLog, 'id'>) => {
