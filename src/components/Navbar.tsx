@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { 
   IconHome, IconWallet, IconCalendar, IconNote, IconSettings, 
-  IconSheet, IconBot, IconGrid 
+  IconSheet, IconBot, IconGrid, IconMoon 
 } from './icons/SvgIcons';
+import { PWAInstallButton } from './PWAInstallBanner';
 import { Menu, X, Sparkles } from 'lucide-react';
 
 export type ActiveAppView = 'hub' | 'kosman' | 'finance' | 'activities' | 'notes' | 'worship';
@@ -135,7 +136,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   : 'text-slate-700 hover:text-black hover:bg-slate-100'
               }`}
             >
-              <span className="inline-block mr-1">🕌</span>
+              <IconMoon className="w-3.5 h-3.5 inline mr-1" />
               <span>Waktu Ibadah</span>
             </button>
           </nav>
@@ -144,6 +145,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Zone 2: Action Tools & Mobile Burger Button */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           
+          <PWAInstallButton compact />
+
           {/* Quick Action: ChatGPT */}
           <button
             onClick={onOpenChatGPT}
@@ -280,7 +283,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   currentView === 'worship' ? 'bg-[#10B981] text-white shadow-[2px_2px_0px_#000]' : 'bg-[#FFFDF6] text-black hover:bg-slate-100'
                 }`}
               >
-                <span className="text-sm">🕌</span>
+                <IconMoon className="w-4 h-4 text-[#FFD000]" />
                 <div className="text-left leading-none">
                   <span className="block text-xs">Waktu Ibadah</span>
                   <span className="text-[8px] font-medium opacity-80">Jadwal Shalat Web</span>

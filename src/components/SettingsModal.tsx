@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
-import { AppVersionState, DeveloperSuggestion } from '../types/kosman';
+import React, { useState, useEffect } from 'react';
+import { AppVersionState } from '../types/kosman';
 import { DEVELOPER_SUGGESTIONS } from '../data/kosmanItems';
 import { 
-  IconSettings, IconCheck, IconDownload, IconUpload, 
+  IconSettings, IconDownload, IconUpload, 
   IconAlert, IconSparkles, IconCheckCircle 
 } from './icons/SvgIcons';
+import { PWAInstallButton } from './PWAInstallBanner';
+import { Smartphone } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -28,6 +30,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [activeTab, setActiveTab] = useState<'versions' | 'suggestions' | 'backup'>('versions');
   const [editableVersions, setEditableVersions] = useState<AppVersionState>(versions);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  useEffect(() => {
+    setEditableVersions(versions);
+  }, [versions, isOpen]);
 
   if (!isOpen) return null;
 
@@ -128,7 +134,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               activeTab === 'backup' ? 'bg-[#A3E635] text-black border-black comic-shadow-sm' : 'bg-slate-100 border-transparent text-slate-700'
             }`}
           >
-            💾 Backup & Restore
+            💾 Backup & Android APK
           </button>
         </div>
 
@@ -146,7 +152,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <label className="block text-[10px] text-slate-700 uppercase mb-0.5">ManageMe! Hub:</label>
                   <input
                     type="text"
-                    value={editableVersions.hub || '2.0.0'}
+                    value={editableVersions.hub || '2.3.0'}
                     onChange={(e) => setEditableVersions({ ...editableVersions, hub: e.target.value })}
                     className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#FF4B82]"
                   />
@@ -156,7 +162,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <label className="block text-[10px] text-slate-700 uppercase mb-0.5">KosMan (Kosan):</label>
                   <input
                     type="text"
-                    value={editableVersions.kosman || '2.0.0'}
+                    value={editableVersions.kosman || '2.3.0'}
                     onChange={(e) => setEditableVersions({ ...editableVersions, kosman: e.target.value })}
                     className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#FF4B82]"
                   />
@@ -166,7 +172,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <label className="block text-[10px] text-slate-700 uppercase mb-0.5">Keuangan (Finance):</label>
                   <input
                     type="text"
-                    value={editableVersions.finance || '2.0.0'}
+                    value={editableVersions.finance || '2.3.0'}
                     onChange={(e) => setEditableVersions({ ...editableVersions, finance: e.target.value })}
                     className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#FF4B82]"
                   />
@@ -176,7 +182,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <label className="block text-[10px] text-slate-700 uppercase mb-0.5">Kegiatan & Perjalanan:</label>
                   <input
                     type="text"
-                    value={editableVersions.activities || '2.0.0'}
+                    value={editableVersions.activities || '2.3.0'}
                     onChange={(e) => setEditableVersions({ ...editableVersions, activities: e.target.value })}
                     className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#FF4B82]"
                   />
@@ -186,7 +192,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <label className="block text-[10px] text-slate-700 uppercase mb-0.5">Catatan (Notes OS):</label>
                   <input
                     type="text"
-                    value={editableVersions.notes || '2.0.0'}
+                    value={editableVersions.notes || '2.3.0'}
                     onChange={(e) => setEditableVersions({ ...editableVersions, notes: e.target.value })}
                     className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#FF4B82]"
                   />
@@ -196,7 +202,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <label className="block text-[10px] text-slate-700 uppercase mb-0.5">Waktu Ibadah (Shalat):</label>
                   <input
                     type="text"
-                    value={editableVersions.worship || '2.0.0'}
+                    value={editableVersions.worship || '2.3.0'}
                     onChange={(e) => setEditableVersions({ ...editableVersions, worship: e.target.value })}
                     className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#FF4B82]"
                   />
@@ -222,22 +228,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <h4 className="font-black text-[11px] uppercase text-black">Status 5 Modul & Hub Saat Ini:</h4>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[11px] font-mono">
                 <div className="p-1.5 bg-white border border-black rounded">
-                  Hub: <span className="font-black text-slate-900">v{editableVersions.hub || '2.0.0'}</span>
+                  Hub: <span className="font-black text-slate-900">v{editableVersions.hub || '2.3.0'}</span>
                 </div>
                 <div className="p-1.5 bg-white border border-black rounded">
-                  KosMan: <span className="font-black text-[#FF4B82]">v{editableVersions.kosman || '2.0.0'}</span>
+                  KosMan: <span className="font-black text-[#FF4B82]">v{editableVersions.kosman || '2.3.0'}</span>
                 </div>
                 <div className="p-1.5 bg-white border border-black rounded">
-                  Keuangan: <span className="font-black text-[#A3E635]">v{editableVersions.finance || '2.0.0'}</span>
+                  Keuangan: <span className="font-black text-[#A3E635]">v{editableVersions.finance || '2.3.0'}</span>
                 </div>
                 <div className="p-1.5 bg-white border border-black rounded">
-                  Kegiatan: <span className="font-black text-[#00E5FF]">v{editableVersions.activities || '2.0.0'}</span>
+                  Kegiatan: <span className="font-black text-[#00E5FF]">v{editableVersions.activities || '2.3.0'}</span>
                 </div>
                 <div className="p-1.5 bg-white border border-black rounded">
-                  Catatan: <span className="font-black text-[#A855F7]">v{editableVersions.notes || '2.0.0'}</span>
+                  Catatan: <span className="font-black text-[#A855F7]">v{editableVersions.notes || '2.3.0'}</span>
                 </div>
                 <div className="p-1.5 bg-white border border-black rounded">
-                  Waktu Ibadah: <span className="font-black text-[#10B981]">v{editableVersions.worship || '2.0.0'}</span>
+                  Waktu Ibadah: <span className="font-black text-[#10B981]">v{editableVersions.worship || '2.3.0'}</span>
                 </div>
               </div>
             </div>
@@ -302,6 +308,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 Impor Backup JSON
                 <input type="file" accept=".json" onChange={handleImportJSON} className="hidden" />
               </label>
+            </div>
+
+            {/* Android PWA & WebAPK Packaging Ready Section */}
+            <div className="bg-[#FFFDF6] border-2 border-black p-3 rounded-xl space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="font-black text-xs uppercase text-black flex items-center gap-1.5">
+                  <Smartphone className="w-4 h-4" />
+                  Android PWA & WebAPK Packaging
+                </h4>
+                <span className="text-[9px] font-black bg-[#A3E635] border border-black px-1.5 py-0.5 rounded uppercase">
+                  Manifest & SW Ready
+                </span>
+              </div>
+              <p className="text-[11px] font-medium text-slate-700 leading-relaxed">
+                Aplikasi sudah dilengkapi Web App Manifest, Service Worker Workbox offline cache, dan maskable PNG icon 512x512.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <PWAInstallButton />
+              </div>
+              <div className="bg-white border border-black rounded-lg p-2 text-[10px] font-mono text-slate-800 space-y-1">
+                <div><strong>Cara Bungkus ke Android .APK (WebAPK / TWA):</strong></div>
+                <div>1. Deploy aplikasi ini ke HTTPS URL publik (Cloud Run / Vercel / domain pribadi).</div>
+                <div>2. Buka <strong>pwabuilder.com</strong> lalu masukkan URL aplikasi Anda.</div>
+                <div>3. Pilih <strong>Package for Store → Android (Trusted Web Activity)</strong> untuk mengunduh file <code>.apk</code> siap pasang di HP Android.</div>
+              </div>
             </div>
 
             <div className="bg-red-50 border-2 border-black p-3 rounded-xl space-y-1.5">

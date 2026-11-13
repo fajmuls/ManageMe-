@@ -1,29 +1,52 @@
-export type KosCategory = 
+export type KosCategory =
+  | 'Makanan'
+  | 'Minuman'
   | 'Bumbu Dapur'
-  | 'Obat & Kesehatan'
-  | 'Kebersihan Toilet'
-  | 'Minuman & Galon'
-  | 'Cemilan & Makanan'
-  | 'Alat Tulis & Kos';
+  | 'Kebersihan & Toilet'
+  | 'Kesehatan'
+  | 'Keperluan Rumah Tangga'
+  | 'Kelistrikan & Kos'
+  | 'Alat Tulis'
+  | 'Keinginan'
+  | 'Belanja';
 
 export type StockStatus = 'AMAN' | 'LOW' | 'HABIS';
 
 export interface KosItem {
   id: string;
-  name: string; // Simplified clean name (no bulky packaging or gram specs)
+  name: string;
   category: KosCategory;
-  subCategory: string; // Sub-kategori e.g. 'Es Krim', 'Penyedap', 'Minyak', 'Mie'
+  tags?: KosCategory[]; // Multi-tag kategori (contoh: Nugget -> ['Makanan', 'Keperluan Rumah Tangga'])
+  subCategory: string;
   quantity: number;
   unit: string;
   price: number; // in IDR
-  timesPurchased: number; // initially 0
-  totalSpend: number; // in IDR (initially 0)
+  timesPurchased: number;
+  totalSpend: number;
   minThreshold: number;
   lastPurchasedDate?: string;
   notes?: string;
 }
 
-export type SortOption = 
+export type WishlistPriority = 'Wajib' | 'Sedang' | 'Keinginan';
+
+export interface WishlistItem {
+  id: string;
+  name: string;
+  shoppingCategory: KosCategory;
+  subCategory?: string;
+  quantity: number;
+  unit: string;
+  estimatedPrice: number;
+  priority: WishlistPriority;
+  purchased: boolean;
+  linkedKosItemId?: string;
+  source: 'manual' | 'low-stock' | 'chatgpt' | 'sheets';
+  notes?: string;
+  createdAt: number;
+}
+
+export type SortOption =
   | 'name-asc'
   | 'name-desc'
   | 'quantity-asc'
@@ -31,7 +54,7 @@ export type SortOption =
   | 'price-desc'
   | 'timesPurchased-desc';
 
-// Finance Types
+// Finance & Kosan Budget Simulation Types
 export interface FinanceRecord {
   id: string;
   type: 'income' | 'expense';
@@ -41,7 +64,25 @@ export interface FinanceRecord {
   note: string;
   account: 'Kas' | 'Bank' | 'E-Wallet';
   date: string; // YYYY-MM-DD
+  source?: 'app' | 'ocr' | 'chatgpt' | 'sheets' | 'wishlist';
   createdAt: number;
+}
+
+export interface BudgetPos {
+  id: string;
+  name: string;
+  weeklyTarget: number;
+  allocationPercent: number;
+  linkedCategories: string[];
+  color: string;
+}
+
+export interface DailyIncomeEntry {
+  id: string;
+  date: string; // YYYY-MM-DD
+  dayName: string; // Senin..Minggu
+  amount: number;
+  note: string;
 }
 
 export interface SavingGoal {
@@ -70,7 +111,7 @@ export interface RoutineActivity {
 
 export interface RoutineCompletion {
   activityId: string;
-  dateStr: string; // YYYY-MM-DD
+  dateStr: string;
 }
 
 export type FardhuPrayer = 'Subuh' | 'Dzuhur' | 'Ashar' | 'Maghrib' | 'Isya' | 'Belum Diketahui';
@@ -168,4 +209,3 @@ export interface DeveloperSuggestion {
   suggestedAction: string;
   applied: boolean;
 }
-
