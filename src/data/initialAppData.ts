@@ -1,16 +1,16 @@
 import { 
-  FinanceRecord, SavingGoal, Budget, WishlistItem, BudgetPos, DailyIncomeEntry,
+  FinanceRecord, SavingGoal, Budget, WishlistItem, BudgetPos, BudgetConfig, DailyIncomeEntry,
   RoutineActivity, MissedPrayer, DailyGoal, WorkoutLog, TripLog,
-  NormalNote, IGNote, PersonalNote, AppVersionState
+  NormalNote, IGNote, PersonalNote, AppVersionState, WorshipPref
 } from '../types/kosman';
 
 export const INITIAL_APP_VERSIONS: AppVersionState = {
-  hub: '2.3.0',
-  kosman: '2.3.0',
-  finance: '2.3.0',
-  activities: '2.3.0',
-  notes: '2.3.0',
-  worship: '2.3.0'
+  hub: '2.4.0',
+  kosman: '2.4.0',
+  finance: '2.4.0',
+  activities: '2.4.0',
+  notes: '2.4.0',
+  worship: '2.4.0'
 };
 
 export const TARGET_SPREADSHEET_ID = '1npqZQRi9KLtQBwi2iLohxgZQyjQjWYpirB6oTHvlmYw';
@@ -21,35 +21,40 @@ export const INITIAL_BUDGETS: Budget[] = [];
 export const INITIAL_WISHLIST_ITEMS: WishlistItem[] = [];
 export const INITIAL_DAILY_INCOMES: DailyIncomeEntry[] = [];
 
+export const INITIAL_BUDGET_CONFIG: BudgetConfig = {
+  periodType: 'monthly',
+  incomeAmount: 1500000,
+};
+
 export const INITIAL_BUDGET_POS: BudgetPos[] = [
-  {
-    id: 'pos-kos',
-    name: 'Listrik, Air & Kos',
-    weeklyTarget: 150000,
-    allocationPercent: 25,
-    linkedCategories: ['Sewa Kos', 'Listrik & Utilitas', 'Kelistrikan & Kos'],
-    color: '#00E5FF',
-  },
   {
     id: 'pos-makan',
     name: 'Makan & Minum',
-    weeklyTarget: 200000,
+    weeklyTarget: 131250,
     allocationPercent: 35,
     linkedCategories: ['Makan & Minum', 'Makanan', 'Minuman'],
     color: '#FFD000',
   },
   {
+    id: 'pos-kos',
+    name: 'Sewa & Listrik Kos',
+    weeklyTarget: 93750,
+    allocationPercent: 25,
+    linkedCategories: ['Sewa Kos', 'Listrik & Utilitas', 'Kelistrikan & Kos'],
+    color: '#00E5FF',
+  },
+  {
     id: 'pos-belanja',
-    name: 'Belanja Dapur & Kebersihan',
-    weeklyTarget: 100000,
+    name: 'Belanja KosMan & Dapur',
+    weeklyTarget: 56250,
     allocationPercent: 15,
-    linkedCategories: ['Belanja KosMan', 'Bumbu Dapur', 'Kebersihan & Toilet', 'Keperluan Rumah Tangga', 'Kesehatan'],
+    linkedCategories: ['Belanja KosMan', 'Bumbu Dapur', 'Kebersihan & Toilet', 'Keperluan Rumah Tangga', 'Kesehatan', 'Belanja'],
     color: '#FF4B82',
   },
   {
     id: 'pos-tabungan',
     name: 'Tabungan Wajib',
-    weeklyTarget: 100000,
+    weeklyTarget: 56250,
     allocationPercent: 15,
     linkedCategories: ['Tabungan'],
     color: '#A3E635',
@@ -57,7 +62,7 @@ export const INITIAL_BUDGET_POS: BudgetPos[] = [
   {
     id: 'pos-keinginan',
     name: 'Keinginan & Transport',
-    weeklyTarget: 50000,
+    weeklyTarget: 37500,
     allocationPercent: 10,
     linkedCategories: ['Keinginan', 'Transportasi', 'Kebutuhan Pribadi', 'Lainnya'],
     color: '#A855F7',
@@ -75,3 +80,8 @@ export const INITIAL_TRIP_LOGS: TripLog[] = [];
 export const INITIAL_NORMAL_NOTES: NormalNote[] = [];
 export const INITIAL_IG_NOTES: IGNote[] = [];
 export const INITIAL_PERSONAL_NOTES: PersonalNote[] = [];
+
+export const INITIAL_WORSHIP_PREF: WorshipPref = {
+  city: 'Jakarta',
+  portalUrl: 'https://waktuibadah.vercel.app',
+};

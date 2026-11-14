@@ -1,51 +1,47 @@
 import React, { useState, useEffect } from 'react';
-import { KosItem, FinanceRecord, WishlistItem, BudgetPos } from '../types/kosman';
-import { 
-  IconSheet, IconDownload, IconCopy, IconCheck, 
-  IconUpload, IconCheckCircle, IconAlert, IconSparkles 
-} from './icons/SvgIcons';
+import { IconSheet, IconDownload, IconCopy, IconCheck, IconSparkles } from './icons/SvgIcons';
+import { InlineConfirmBar, InlineNotice } from './InlineUI';
 import {
-  googleSignIn, googleSignOut, getAccessToken, getCurrentUser,
-  getSpreadsheetId, setSpreadsheetId, setupSpreadsheetDatabase,
-  pullDatabaseFromSheets, initGoogleAuth
+  googleSignIn,
+  googleSignOut,
+  getAccessToken,
+  getCurrentUser,
+  getSpreadsheetId,
+  setSpreadsheetId,
+  setupSpreadsheetDatabase,
+  pullDatabaseFromSheets,
+  initGoogleAuth,
+  FullSpreadsheetPayload,
 } from '../services/googleSheetsAutoSync';
 import { ExternalLink, RefreshCw } from 'lucide-react';
 
 interface GoogleSheetsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  items: KosItem[];
-  wishlist: WishlistItem[];
-  financeRecords: FinanceRecord[];
-  budgetPos: BudgetPos[];
-  onUpdateAllItems: (newItems: KosItem[]) => void;
-  onSyncPullSuccess: (pulled: {
-    items: KosItem[];
-    wishlist: WishlistItem[];
-    financeRecords: FinanceRecord[];
-    budgetPos: BudgetPos[];
-  }) => void;
+  fullPayload: FullSpreadsheetPayload;
+  onSyncPullSuccess: (pulled: Partial<FullSpreadsheetPayload>) => void;
 }
 
+/**
+ * Panel "Set Spreadsheet Saya" menyatu langsung di dalam website (inline in-flow, bukan pop-up).
+ */
 export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
   isOpen,
   onClose,
-  items,
-  wishlist,
-  financeRecords,
-  budgetPos,
-  onUpdateAllItems,
+  fullPayload,
   onSyncPullSuccess,
 }) => {
   const [copiedTSV, setCopiedTSV] = useState(false);
   const [copiedFinanceTSV, setCopiedFinanceTSV] = useState(false);
-  const [pasteInputText, setPasteInputText] = useState('');
   const [sheetIdInput, setSheetIdInput] = useState(getSpreadsheetId());
   const [isConnected, setIsConnected] = useState(!!getAccessToken());
   const [userEmail, setUserEmail] = useState<string | null>(getCurrentUser()?.email || null);
   const [isBusy, setIsBusy] = useState(false);
   const [pendingConfirmAction, setPendingConfirmAction] = useState<'setup' | 'pull' | null>(null);
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{
+    type: 'success' | 'error' | 'info';
+    text: string;
+  } | null>(null);
 
   useEffect(() => {
     const unsub = initGoogleAuth(
@@ -73,7 +69,10 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
       if (res) {
         setIsConnected(true);
         setUserEmail(res.user.email);
-        setStatusMessage({ type: 'success', text: `Terhubung sebagai ${res.user.email}! Siap membaca & menulis ke Google Spreadsheet.` });
+        setStatusMessage({
+          type: 'success',
+          text: `Terhubung sebagai ${res.user.email}. Sinkronisasi otomatis aktif selama online.`,
+        });
       }
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err?.message || 'Gagal login Google Workspace.' });
@@ -85,7 +84,10 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
   const handleSaveSheetId = () => {
     const clean = setSpreadsheetId(sheetIdInput);
     setSheetIdInput(clean);
-    setStatusMessage({ type: 'info', text: `Target Spreadsheet ID diperbarui: ${clean}` });
+    setStatusMessage({
+      type: 'info',
+      text: `Spreadsheet aktif berhasil diset ke ID: ${clean}. Tekan "Setup 9 Tab Database" jika Spreadsheet masih kosong.`,
+    });
   };
 
   const handleConfirmedSetupSchema = async () => {
@@ -99,15 +101,10 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
     setIsBusy(true);
     setPendingConfirmAction(null);
     try {
-      await setupSpreadsheetDatabase(token, activeSpreadsheetId, {
-        items,
-        wishlist,
-        financeRecords,
-        budgetPos,
-      });
+      await setupSpreadsheetDatabase(token, activeSpreadsheetId, fullPayload);
       setStatusMessage({
         type: 'success',
-        text: 'Berhasil! 5 Tab Database (Dashboard_Ringkasan, KosMan_Inventaris, Wishlist_Belanja, Keuangan_Transaksi, Kos_Budget_Simulasi) beserta rumus otomatis & filter tabel telah dibuat di Spreadsheet Anda.',
+        text: 'Berhasil! 9 Tab Terpusat (Dashboard, KosMan Inventaris, KosMan Riwayat Beli, Wishlist, Keuangan, Budget Rasio, Kegiatan, Catatan, Waktu Ibadah) + rumus otomatis sudah siap.',
       });
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err?.message || 'Gagal setup Spreadsheet.' });
@@ -131,7 +128,7 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
       onSyncPullSuccess(pulled);
       setStatusMessage({
         type: 'success',
-        text: `Sinkronisasi 2-Arah Berhasil! Terbaca ${pulled.items.length} item KosMan, ${pulled.wishlist.length} wishlist, ${pulled.financeRecords.length} transaksi, dan ${pulled.budgetPos.length} pos anggaran.`,
+        text: `Sinkronisasi 2-Arah selesai! Terbaca ${pulled.counts.items} item KosMan, ${pulled.counts.wishlist} wishlist, ${pulled.counts.finance} transaksi, ${pulled.counts.activities} kegiatan, dan ${pulled.counts.notes} catatan.`,
       });
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err?.message || 'Gagal menarik data dari Spreadsheet.' });
@@ -140,10 +137,9 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
     }
   };
 
-  // Offline TSV Copy Helpers
   const handleCopyKosManTSV = () => {
-    const headers = ['ID', 'Nama_Item', 'Kategori_Utama', 'Multi_Tags', 'Sub_Kategori', 'Stok', 'Satuan', 'Min_Stok', 'Harga_Satuan'];
-    const rows = items.map(item => [
+    const headers = ['ID', 'Nama_Item', 'Kategori', 'Multi_Tags', 'Sub_Kategori', 'Stok', 'Satuan', 'Min_Stok', 'Total_Belanja_Rp'];
+    const rows = fullPayload.items.map((item) => [
       item.id,
       item.name,
       item.category,
@@ -152,35 +148,37 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
       item.quantity,
       item.unit,
       item.minThreshold,
-      item.price
+      item.totalSpend || 0,
     ]);
-    navigator.clipboard.writeText([headers.join('\t'), ...rows.map(r => r.join('\t'))].join('\n'));
+    navigator.clipboard.writeText([headers.join('\t'), ...rows.map((r) => r.join('\t'))].join('\n'));
     setCopiedTSV(true);
     setStatusMessage({ type: 'success', text: 'Tabel inventaris tersalin ke clipboard!' });
     setTimeout(() => setCopiedTSV(false), 3000);
   };
 
   const handleCopyFinanceTSV = () => {
-    const headers = ['ID', 'Tanggal', 'Tipe', 'Kategori', 'Keterangan', 'Nominal', 'Akun'];
-    const rows = financeRecords.map(f => [
+    const headers = ['ID', 'Tanggal', 'Jam', 'Tipe', 'Kategori', 'Keterangan', 'Nominal_Rp', 'Akun'];
+    const rows = fullPayload.financeRecords.map((f) => [
       f.id,
       f.date,
+      f.time || '',
       f.type === 'income' ? 'Pemasukan' : 'Pengeluaran',
       f.category,
       f.note,
       f.amount,
-      f.account
+      f.account,
     ]);
-    navigator.clipboard.writeText([headers.join('\t'), ...rows.map(r => r.join('\t'))].join('\n'));
+    navigator.clipboard.writeText([headers.join('\t'), ...rows.map((r) => r.join('\t'))].join('\n'));
     setCopiedFinanceTSV(true);
     setStatusMessage({ type: 'success', text: 'Tabel keuangan tersalin ke clipboard!' });
     setTimeout(() => setCopiedFinanceTSV(false), 3000);
   };
 
   const handleDownloadCSV = () => {
-    const headers = ['id,name,category,tags,subCategory,quantity,unit,price,minThreshold'];
-    const rows = items.map(i =>
-      `"${i.id}","${i.name.replace(/"/g, '""')}","${i.category}","${(i.tags || [i.category]).join(', ')}","${i.subCategory}",${i.quantity},"${i.unit}",${i.price},${i.minThreshold}`
+    const headers = ['id,name,category,tags,subCategory,quantity,unit,minThreshold,totalSpend'];
+    const rows = fullPayload.items.map(
+      (i) =>
+        `"${i.id}","${i.name.replace(/"/g, '""')}","${i.category}","${(i.tags || [i.category]).join(', ')}","${i.subCategory}",${i.quantity},"${i.unit}",${i.minThreshold},${i.totalSpend || 0}`
     );
     const csvContent = '\uFEFF' + [headers, ...rows].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -189,47 +187,12 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
     link.href = url;
     link.download = `ManageMe_KosMan_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
-    setStatusMessage({ type: 'success', text: 'File CSV diunduh!' });
-  };
-
-  const handleImportPastedTSV = () => {
-    if (!pasteInputText.trim()) return;
-    try {
-      const lines = pasteInputText.trim().split('\n');
-      const newItems: KosItem[] = [];
-      lines.forEach((line, idx) => {
-        const cols = line.split('\t');
-        if (cols.length >= 2) {
-          if (idx === 0 && (cols[0].toLowerCase().includes('id') || cols[1].toLowerCase().includes('nama'))) return;
-          newItems.push({
-            id: 'sheets-' + Date.now() + '-' + idx,
-            name: (cols[1] || cols[0]).trim(),
-            category: (cols[2] as any) || 'Bumbu Dapur',
-            tags: String(cols[3] || cols[2] || 'Bumbu Dapur').split(',').map(s => s.trim() as any),
-            subCategory: cols[4] || 'Umum',
-            quantity: parseInt(cols[5]) || 0,
-            unit: cols[6] || 'buah',
-            minThreshold: parseInt(cols[7]) || 1,
-            price: parseInt(cols[8]) || 10000,
-            timesPurchased: 0,
-            totalSpend: 0,
-          });
-        }
-      });
-      if (newItems.length > 0) {
-        onUpdateAllItems(newItems);
-        setStatusMessage({ type: 'success', text: `Berhasil impor ${newItems.length} barang dari paste!` });
-        setPasteInputText('');
-      }
-    } catch {
-      setStatusMessage({ type: 'error', text: 'Gagal mengurai data paste.' });
-    }
+    setStatusMessage({ type: 'success', text: 'File CSV inventaris diunduh!' });
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4">
-      <div className="bg-white border-2 border-black rounded-2xl p-3.5 sm:p-5 shadow-[5px_5px_0px_#000] max-w-xl w-full space-y-3 max-h-[92vh] overflow-y-auto">
-        
+    <section className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 pt-3">
+      <div className="bg-white border-2 border-black rounded-xl p-3.5 sm:p-5 shadow-[4px_4px_0px_#000] space-y-3">
         {/* Header */}
         <div className="flex items-center justify-between border-b-2 border-black pb-2">
           <div className="flex items-center gap-2">
@@ -238,68 +201,69 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
             </div>
             <div>
               <h3 className="font-display font-black text-sm sm:text-base uppercase text-black leading-none">
-                DATABASE GOOGLE SHEETS 2-ARAH
+                SET SPREADSHEET SAYA (DATABASE 9 TAB TERPUSAT)
               </h3>
-              <span className="text-[10px] font-bold text-slate-500">Auto-Rumus, Filter & Sinkron ChatGPT</span>
+              <span className="text-[10px] font-bold text-slate-600">
+                KosMan + Riwayat Beli + Wishlist + Keuangan + Kegiatan + Catatan + Waktu Ibadah
+              </span>
             </div>
           </div>
-          <button onClick={onClose} className="font-bold text-slate-500 hover:text-black text-base px-2">✕</button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-2.5 py-1 bg-slate-100 border border-black rounded-lg text-xs font-black text-black"
+          >
+            Tutup
+          </button>
         </div>
 
-        {/* Status Notification */}
+        {/* Inline Status Notice */}
         {statusMessage && (
-          <div className={`p-2 border border-black rounded-lg text-[11px] font-bold flex items-start gap-2 ${
-            statusMessage.type === 'success' ? 'bg-[#A3E635] text-black' :
-            statusMessage.type === 'error' ? 'bg-[#FF4B82] text-white' : 'bg-[#00E5FF] text-black'
-          }`}>
-            {statusMessage.type === 'success' ? <IconCheckCircle className="w-4 h-4 shrink-0 mt-0.5" /> : <IconAlert className="w-4 h-4 shrink-0 mt-0.5" />}
-            <span>{statusMessage.text}</span>
-          </div>
+          <InlineNotice
+            type={statusMessage.type}
+            message={statusMessage.text}
+            onClose={() => setStatusMessage(null)}
+          />
         )}
 
-        {/* Confirmation Dialog Banner before Mutating Spreadsheet */}
+        {/* Inline Confirmation Banner before Mutating Spreadsheet or Overwriting Local Data */}
         {pendingConfirmAction && (
-          <div className="bg-[#FFD000] border-2 border-black rounded-xl p-3 space-y-2 shadow-[3px_3px_0px_#000]">
-            <h4 className="font-black text-xs uppercase text-black flex items-center gap-1.5">
-              <IconAlert className="w-4 h-4" />
-              {pendingConfirmAction === 'setup'
-                ? 'Konfirmasi Inisialisasi & Tulis Ulang Schema Spreadsheet?'
-                : 'Konfirmasi Tarik Data (Sync Pull) dari Spreadsheet?'}
-            </h4>
-            <p className="text-[11px] font-bold text-slate-900">
-              {pendingConfirmAction === 'setup'
-                ? `Tindakan ini akan membuat/memperbarui 5 tab (Dashboard_Ringkasan, KosMan_Inventaris, Wishlist_Belanja, Keuangan_Transaksi, Kos_Budget_Simulasi) lengkap dengan rumus & filter pada Spreadsheet ID: ${activeSpreadsheetId}.`
-                : `Data lokal aplikasi akan diperbarui sesuai isi terbaru dari Google Spreadsheet ID: ${activeSpreadsheetId} (termasuk hasil editan ChatGPT).`}
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setPendingConfirmAction(null)}
-                className="px-3 py-1 bg-white border border-black rounded-lg text-xs font-bold"
-              >
-                Batal
-              </button>
-              <button
-                onClick={pendingConfirmAction === 'setup' ? handleConfirmedSetupSchema : handleConfirmedPullData}
-                className="px-3 py-1 bg-black text-white border border-black rounded-lg text-xs font-black uppercase"
-              >
-                Ya, Lanjutkan
-              </button>
-            </div>
-          </div>
+          <InlineConfirmBar
+            danger={pendingConfirmAction === 'setup'}
+            title={
+              pendingConfirmAction === 'setup'
+                ? 'Konfirmasi Inisialisasi & Tulis Ulang 9 Tab Spreadsheet?'
+                : 'Konfirmasi Tarik Data Terbaru (Sync Pull) dari Spreadsheet?'
+            }
+            description={
+              pendingConfirmAction === 'setup'
+                ? `Aksi ini membuat/memperbarui 9 tab (KosMan_Inventaris, KosMan_Riwayat_Beli, Wishlist_Belanja, Keuangan_Transaksi, Keuangan_Budget_Pos, Kegiatan_Harian, Catatan_Pribadi, Waktu_Ibadah, Dashboard_Ringkasan) pada Spreadsheet ID: ${activeSpreadsheetId}.`
+                : `Data lokal aplikasi akan diperbarui sesuai isi terbaru Google Spreadsheet ID: ${activeSpreadsheetId} (termasuk perubahan dari ChatGPT).`
+            }
+            confirmLabel="Ya, Sinkronkan"
+            onConfirm={
+              pendingConfirmAction === 'setup'
+                ? handleConfirmedSetupSchema
+                : handleConfirmedPullData
+            }
+            onCancel={() => setPendingConfirmAction(null)}
+          />
         )}
 
-        {/* SECTION 1: Live Google Workspace OAuth & Target Spreadsheet */}
+        {/* Google Auth + Set Spreadsheet ID */}
         <div className="bg-[#FFFDF6] border-2 border-black p-3 rounded-xl space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <span className="text-[10px] font-black uppercase text-slate-600 block">Target Google Spreadsheet:</span>
+              <span className="text-[10px] font-black uppercase text-slate-600 block">
+                Spreadsheet Database Aktif:
+              </span>
               <a
                 href={spreadsheetUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs font-mono font-black text-blue-700 hover:underline flex items-center gap-1"
               >
-                <span className="truncate max-w-[230px] sm:max-w-xs">{activeSpreadsheetId}</span>
+                <span className="truncate max-w-[230px] sm:max-w-md">{activeSpreadsheetId}</span>
                 <ExternalLink className="w-3 h-3 shrink-0" />
               </a>
             </div>
@@ -307,18 +271,24 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
             {isConnected ? (
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-bold bg-[#A3E635] border border-black px-2 py-0.5 rounded text-black">
-                  ✓ {userEmail || 'Connected'}
+                  Terhubung: {userEmail || 'Google Account'}
                 </span>
                 <button
-                  onClick={async () => { await googleSignOut(); setIsConnected(false); setUserEmail(null); }}
+                  type="button"
+                  onClick={async () => {
+                    await googleSignOut();
+                    setIsConnected(false);
+                    setUserEmail(null);
+                  }}
                   className="text-[10px] font-bold underline text-slate-600 hover:text-black"
                 >
                   Putus
                 </button>
               </div>
             ) : (
-              /* Official Google Sign-in Styled Button */
+              /* Official Sign in with Google Button */
               <button
+                type="button"
                 onClick={handleGoogleLogin}
                 disabled={isBusy}
                 className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-800 border border-black px-3 py-1.5 rounded-lg text-xs font-bold shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-50"
@@ -334,100 +304,77 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
             )}
           </div>
 
-          {/* Change URL/ID input */}
-          <div className="flex gap-1.5">
+          <div className="flex flex-col sm:flex-row gap-1.5">
             <input
               type="text"
               value={sheetIdInput}
               onChange={(e) => setSheetIdInput(e.target.value)}
-              placeholder="Tempel URL atau ID Google Spreadsheet..."
-              className="flex-1 px-2 py-1 border border-black rounded-lg text-[11px] font-mono bg-white"
+              placeholder="Tempel URL atau ID Google Spreadsheet pribadi Anda..."
+              className="flex-1 px-2.5 py-1.5 border border-black rounded-lg text-xs font-mono bg-white"
             />
             <button
+              type="button"
               onClick={handleSaveSheetId}
-              className="px-2.5 py-1 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase border border-black"
+              className="px-3 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-black uppercase border border-black"
             >
-              Simpan ID
+              Set Spreadsheet
             </button>
           </div>
 
-          {/* 2-Way Live Sync Buttons */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
             <button
+              type="button"
               onClick={() => setPendingConfirmAction('setup')}
               disabled={isBusy || !isConnected}
-              className="comic-button bg-[#FFD000] text-black p-2 rounded-lg border border-black font-black text-[11px] uppercase flex items-center justify-center gap-1.5 disabled:opacity-50"
+              className="comic-button bg-[#FFD000] text-black p-2 rounded-lg border border-black font-black text-xs uppercase flex items-center justify-center gap-1.5 disabled:opacity-50"
             >
               <IconSparkles className="w-3.5 h-3.5" />
-              <span>{isBusy ? 'Memproses...' : 'Setup 5 Tab + Rumus & Filter'}</span>
+              <span>{isBusy ? 'Memproses...' : 'Setup 9 Tab Database + Rumus'}</span>
             </button>
 
             <button
+              type="button"
               onClick={() => setPendingConfirmAction('pull')}
               disabled={isBusy || !isConnected}
-              className="comic-button bg-[#00E5FF] text-black p-2 rounded-lg border border-black font-black text-[11px] uppercase flex items-center justify-center gap-1.5 disabled:opacity-50"
+              className="comic-button bg-[#00E5FF] text-black p-2 rounded-lg border border-black font-black text-xs uppercase flex items-center justify-center gap-1.5 disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isBusy ? 'animate-spin' : ''}`} />
-              <span>Tarik Data Terbaru (Baca Sheets)</span>
+              <span>Tarik Data Terbaru (Sync Pull)</span>
             </button>
           </div>
         </div>
 
-        {/* SECTION 2: Offline Copy TSV & CSV Fallback */}
-        <div className="bg-slate-50 border border-black p-3 rounded-xl space-y-2">
-          <h4 className="font-black text-[11px] uppercase text-black flex items-center gap-1.5">
-            <IconCopy className="w-3.5 h-3.5" />
-            Salin Cepat & Ekspor CSV (Tanpa Login)
-          </h4>
-          <div className="grid grid-cols-3 gap-1.5">
+        {/* Offline Fallback Copy / Export */}
+        <div className="bg-slate-50 border border-black p-2.5 rounded-xl flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[11px] font-black uppercase text-slate-700">Ekspor Cepat Offline:</span>
+          <div className="flex flex-wrap gap-1.5">
             <button
+              type="button"
               onClick={handleCopyKosManTSV}
-              className="bg-white text-black p-1.5 rounded-lg border border-black font-bold text-[10px] flex items-center justify-center gap-1"
+              className="bg-white text-black px-2.5 py-1 rounded-lg border border-black font-bold text-[11px] flex items-center gap-1"
             >
               {copiedTSV ? <IconCheck className="w-3 h-3 text-green-700" /> : <IconCopy className="w-3 h-3" />}
               <span>{copiedTSV ? 'Tersalin' : 'Salin Stok'}</span>
             </button>
-
             <button
+              type="button"
               onClick={handleCopyFinanceTSV}
-              className="bg-white text-black p-1.5 rounded-lg border border-black font-bold text-[10px] flex items-center justify-center gap-1"
+              className="bg-white text-black px-2.5 py-1 rounded-lg border border-black font-bold text-[11px] flex items-center gap-1"
             >
               {copiedFinanceTSV ? <IconCheck className="w-3 h-3 text-green-700" /> : <IconCopy className="w-3 h-3" />}
               <span>{copiedFinanceTSV ? 'Tersalin' : 'Salin Kas'}</span>
             </button>
-
             <button
+              type="button"
               onClick={handleDownloadCSV}
-              className="bg-white text-black p-1.5 rounded-lg border border-black font-bold text-[10px] flex items-center justify-center gap-1"
+              className="bg-white text-black px-2.5 py-1 rounded-lg border border-black font-bold text-[11px] flex items-center gap-1"
             >
               <IconDownload className="w-3 h-3" />
               <span>Unduh CSV</span>
             </button>
           </div>
         </div>
-
-        {/* SECTION 3: Manual Paste Import */}
-        <div className="bg-white border border-black p-3 rounded-xl space-y-1.5">
-          <h4 className="font-black text-[11px] uppercase text-black flex items-center gap-1.5">
-            <IconUpload className="w-3.5 h-3.5" />
-            Impor Manual via Paste Tabel Sheets
-          </h4>
-          <textarea
-            value={pasteInputText}
-            onChange={(e) => setPasteInputText(e.target.value)}
-            placeholder="Tempel baris yang disalin dari Google Sheets di sini..."
-            rows={2}
-            className="w-full p-2 border border-black rounded-lg font-mono text-[10px]"
-          />
-          <button
-            onClick={handleImportPastedTSV}
-            className="bg-[#A3E635] text-black px-3 py-1 rounded-lg border border-black font-black text-[10px] uppercase"
-          >
-            Impor Baris ke KosMan
-          </button>
-        </div>
-
       </div>
-    </div>
+    </section>
   );
 };

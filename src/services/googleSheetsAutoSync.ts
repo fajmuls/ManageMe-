@@ -3,7 +3,24 @@ import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User 
 import firebaseConfig from '../../firebase-applet-config.json';
 import { TARGET_SPREADSHEET_ID } from '../data/initialAppData';
 import { normalizeKosCategory } from '../data/kosmanItems';
-import { KosItem, WishlistItem, FinanceRecord, BudgetPos, KosCategory } from '../types/kosman';
+import {
+  KosItem,
+  PurchaseHistoryEntry,
+  WishlistItem,
+  FinanceRecord,
+  BudgetPos,
+  BudgetConfig,
+  KosCategory,
+  RoutineActivity,
+  MissedPrayer,
+  DailyGoal,
+  TripLog,
+  WorkoutLog,
+  NormalNote,
+  IGNote,
+  PersonalNote,
+  WorshipPref,
+} from '../types/kosman';
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const auth = getAuth(app);
@@ -21,6 +38,10 @@ let cachedAccessToken: string | null = null;
 
 export const getSpreadsheetId = (): string => {
   return localStorage.getItem('manageme_target_spreadsheet_id') || TARGET_SPREADSHEET_ID;
+};
+
+export const getSpreadsheetUrl = (): string => {
+  return `https://docs.google.com/spreadsheets/d/${getSpreadsheetId()}/edit`;
 };
 
 export const setSpreadsheetId = (id: string) => {
@@ -50,7 +71,11 @@ export const initGoogleAuth = (
   });
 };
 
-export const googleSignIn = async (): Promise<{ user: User; accessToken: string; spreadsheetId: string } | null> => {
+export const googleSignIn = async (): Promise<{
+  user: User;
+  accessToken: string;
+  spreadsheetId: string;
+} | null> => {
   try {
     isSigningIn = true;
     const result = await signInWithPopup(auth, provider);
@@ -71,7 +96,6 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string;
 };
 
 export const getAccessToken = (): string | null => cachedAccessToken;
-
 export const getCurrentUser = (): User | null => auth.currentUser;
 
 export const googleSignOut = async () => {
@@ -92,16 +116,273 @@ export const fetchSpreadsheetMetadata = async (token: string, spreadsheetId: str
   return await res.json();
 };
 
-// Setup 5-tab relational schema with live formulas, freeze headers & filters
+export interface FullSpreadsheetPayload {
+  items: KosItem[];
+  wishlist: WishlistItem[];
+  financeRecords: FinanceRecord[];
+  budgetPos: BudgetPos[];
+  budgetConfig: BudgetConfig;
+  routines: RoutineActivity[];
+  prayers: MissedPrayer[];
+  goals: DailyGoal[];
+  trips: TripLog[];
+  workouts: WorkoutLog[];
+  normalNotes: NormalNote[];
+  igNotes: IGNote[];
+  personalNotes: PersonalNote[];
+  worshipPref: WorshipPref;
+}
+
+const TAB_NAMES = [
+  'Dashboard_Ringkasan',
+  'KosMan_Inventaris',
+  'KosMan_Riwayat_Beli',
+  'Wishlist_Belanja',
+  'Keuangan_Transaksi',
+  'Keuangan_Budget_Pos',
+  'Kegiatan_Harian',
+  'Catatan_Pribadi',
+  'Waktu_Ibadah',
+] as const;
+
+// Build tab matrix helpers
+const buildKosRows = (items: KosItem[]) => {
+  const header = [
+    'ID',
+    'Nama_Item',
+    'Kategori_Utama',
+    'Multi_Tags',
+    'Sub_Kategori',
+    'Stok',
+    'Satuan',
+    'Min_Stok',
+    'Total_Pengeluaran_Rp',
+    'Jumlah_Beli_Kali',
+    'Status_Stok',
+    'Catatan',
+    'Terakhir_Beli_Tgl_Jam',
+  ];
+  const rows = items.map((item, idx) => {
+    const r = idx + 2;
+    const tagsStr = (item.tags && item.tags.length > 0 ? item.tags : [item.category]).join(', ');
+    return [
+      item.id,
+      item.name,
+      item.category,
+      tagsStr,
+      item.subCategory,
+      item.quantity,
+      item.unit,
+      item.minThreshold,
+      item.totalSpend || 0,
+      item.timesPurchased || 0,
+      `=IF(F${r}=0,"HABIS",IF(F${r}<=H${r},"LOW","AMAN"))`,
+      item.notes || '',
+      item.lastPurchasedDate || '',
+    ];
+  });
+  return [header, ...rows];
+};
+
+const buildKosHistoryRows = (items: KosItem[]) => {
+  const header = [
+    'ID_Riwayat',
+    'ID_Item',
+    'Nama_Item',
+    'Tanggal_Jam',
+    'Qty_Beli',
+    'Total_Harga_Rp',
+    'Rata_Rata_Unit',
+    'Akun',
+    'Catatan',
+  ];
+  const rows: any[][] = [];
+  items.forEach((item) => {
+    (item.purchaseHistory || []).forEach((h) => {
+      const rowIdx = rows.length + 2;
+      rows.push([
+        h.id,
+        item.id,
+        item.name,
+        h.purchasedAt,
+        h.quantity,
+        h.totalPrice,
+        `=IF(E${rowIdx}>0,ROUND(F${rowIdx}/E${rowIdx},0),0)`,
+        h.account,
+        h.note || '',
+      ]);
+    });
+  });
+  return [header, ...rows];
+};
+
+const buildWishlistRows = (wishlist: WishlistItem[]) => {
+  const header = [
+    'ID',
+    'Nama_Barang',
+    'Kategori_Belanja',
+    'Sub_Kategori',
+    'Qty_Beli',
+    'Satuan',
+    'Estimasi_Total_Rp',
+    'Sudah_Dibeli',
+    'Prioritas',
+    'Sumber',
+  ];
+  const rows = wishlist.map((w) => [
+    w.id,
+    w.name,
+    w.shoppingCategory,
+    w.subCategory || 'Umum',
+    w.quantity,
+    w.unit || 'buah',
+    w.estimatedPrice,
+    w.purchased,
+    w.priority,
+    w.source,
+  ]);
+  return [header, ...rows];
+};
+
+const buildFinanceRows = (financeRecords: FinanceRecord[]) => {
+  const header = [
+    'ID',
+    'Tanggal',
+    'Jam',
+    'Minggu_Ke',
+    'Tipe',
+    'Kategori',
+    'Sub_Kategori',
+    'Keterangan',
+    'Nominal_Rp',
+    'Akun',
+    'Sumber',
+  ];
+  const rows = financeRecords.map((f, idx) => {
+    const r = idx + 2;
+    return [
+      f.id,
+      f.date,
+      f.time || '',
+      `=IF(B${r}="","",IFERROR(ISOWEEKNUM(DATEVALUE(B${r})),ISOWEEKNUM(TODAY())))`,
+      f.type === 'income' ? 'Pemasukan' : 'Pengeluaran',
+      f.category,
+      f.subCategory || '',
+      f.note,
+      f.amount,
+      f.account,
+      f.source || 'app',
+    ];
+  });
+  return [header, ...rows];
+};
+
+const buildBudgetRows = (budgetPos: BudgetPos[], budgetConfig: BudgetConfig) => {
+  const weeklyFactor = budgetConfig.periodType === 'monthly' ? 1 / 4 : 1;
+  const header = [
+    'ID',
+    'Pos_Anggaran',
+    'Rasio_Persen',
+    'Periode_Pemasukan',
+    'Pemasukan_Acuan_Rp',
+    'Jatah_Mingguan_Rp',
+    'Terpakai_Minggu_Ini',
+    'Sisa_Budget',
+    'Kategori_Terkait_Regex',
+    'Status',
+  ];
+  const rows = budgetPos.map((p, idx) => {
+    const r = idx + 2;
+    const regexStr = p.linkedCategories.join('|');
+    const calcWeekly = Math.round(budgetConfig.incomeAmount * weeklyFactor * (p.allocationPercent / 100));
+    return [
+      p.id,
+      p.name,
+      p.allocationPercent,
+      budgetConfig.periodType === 'monthly' ? 'Bulanan' : 'Mingguan',
+      budgetConfig.incomeAmount,
+      calcWeekly,
+      `=IFERROR(SUM(FILTER(Keuangan_Transaksi!$I$2:$I,Keuangan_Transaksi!$E$2:$E="Pengeluaran",Keuangan_Transaksi!$D$2:$D=ISOWEEKNUM(TODAY()),REGEXMATCH(Keuangan_Transaksi!$F$2:$F,I${r}))),0)`,
+      `=F${r}-G${r}`,
+      regexStr,
+      `=IF(H${r}<0,"OVER","AMAN")`,
+    ];
+  });
+  return [header, ...rows];
+};
+
+const buildActivitiesRows = (
+  routines: RoutineActivity[],
+  prayers: MissedPrayer[],
+  goals: DailyGoal[],
+  trips: TripLog[],
+  workouts: WorkoutLog[]
+) => {
+  const header = ['ID', 'Jenis_Modul', 'Judul_Aktivitas', 'Kategori_Atau_Rute', 'Status_Atau_Durasi', 'Tanggal_Info', 'Payload_JSON'];
+  const rows: any[][] = [];
+
+  routines.forEach((r) =>
+    rows.push([r.id, 'Rutinitas', r.name, r.category, r.completedToday ? 'Selesai' : 'Belum', new Date().toISOString().split('T')[0], JSON.stringify(r)])
+  );
+  prayers.forEach((p) =>
+    rows.push([p.id, 'Qadha_Shalat', p.prayer, 'Ibadah', p.completed ? 'Sudah Diganti' : 'Belum', p.dateInfo, JSON.stringify(p)])
+  );
+  goals.forEach((g) =>
+    rows.push([g.id, 'Target_Harian', g.text, g.category, g.completed ? 'Tercapai' : 'Aktif', new Date().toISOString().split('T')[0], JSON.stringify(g)])
+  );
+  trips.forEach((t) =>
+    rows.push([t.id, 'Perjalanan', `${t.origin} -> ${t.destination}`, t.vehicle, `BBM:${t.fuelCost || 0} Tol:${t.tollCost || 0}`, t.date, JSON.stringify(t)])
+  );
+  workouts.forEach((w) =>
+    rows.push([w.id, 'Workout', w.title, w.routine, `${w.durationMins} menit`, w.date, JSON.stringify(w)])
+  );
+
+  return [header, ...rows];
+};
+
+const buildNotesRows = (
+  normalNotes: NormalNote[],
+  igNotes: IGNote[],
+  personalNotes: PersonalNote[]
+) => {
+  const header = ['ID', 'Jenis_Catatan', 'Judul_Atau_Nama', 'Kategori_Atau_Lagu', 'Isi_Ringkas', 'Diperbarui', 'Payload_JSON'];
+  const rows: any[][] = [];
+
+  normalNotes.forEach((n) =>
+    rows.push([n.id, 'Umum', n.title, n.category || 'Umum', n.content, new Date(n.updatedAt).toISOString(), JSON.stringify(n)])
+  );
+  igNotes.forEach((ig) =>
+    rows.push([ig.id, 'IG_Music', ig.owner, ig.songTitle, ig.content, new Date(ig.updatedAt).toISOString(), JSON.stringify(ig)])
+  );
+  personalNotes.forEach((p) =>
+    rows.push([
+      p.id,
+      'Pribadi',
+      p.personName,
+      'Brankas/Kontak',
+      `${p.extraNotes} | ${p.customFields.map((f) => `${f.key}: ${f.value}`).join(', ')}`,
+      new Date(p.updatedAt).toISOString(),
+      JSON.stringify(p),
+    ])
+  );
+
+  return [header, ...rows];
+};
+
+const buildWorshipRows = (worshipPref: WorshipPref) => {
+  return [
+    ['Kunci', 'Nilai', 'Keterangan'],
+    ['Kota_Default', worshipPref.city || 'Jakarta', 'Kota acuan jadwal shalat'],
+    ['Portal_Web', worshipPref.portalUrl || 'https://waktuibadah.vercel.app', 'Website resmi waktu ibadah'],
+    ['Terakhir_Sinkron', worshipPref.lastCheckedAt || new Date().toLocaleString('id-ID'), 'Timestamp pembaruan'],
+  ];
+};
+
+// Full 9-tab relational schema setup with live formulas, freeze headers & filters
 export const setupSpreadsheetDatabase = async (
   token: string,
   spreadsheetId: string,
-  payload: {
-    items: KosItem[];
-    wishlist: WishlistItem[];
-    financeRecords: FinanceRecord[];
-    budgetPos: BudgetPos[];
-  }
+  payload: FullSpreadsheetPayload
 ) => {
   const meta = await fetchSpreadsheetMetadata(token, spreadsheetId);
   const existingSheets: { title: string; sheetId: number }[] = (meta.sheets || []).map((s: any) => ({
@@ -109,15 +390,7 @@ export const setupSpreadsheetDatabase = async (
     sheetId: s.properties.sheetId,
   }));
 
-  const requiredTabs = [
-    'Dashboard_Ringkasan',
-    'KosMan_Inventaris',
-    'Wishlist_Belanja',
-    'Keuangan_Transaksi',
-    'Kos_Budget_Simulasi',
-  ];
-
-  const addRequests = requiredTabs
+  const addRequests = TAB_NAMES
     .filter((tab) => !existingSheets.some((s) => s.title === tab))
     .map((tab) => ({
       addSheet: { properties: { title: tab, gridProperties: { frozenRowCount: 1 } } },
@@ -135,118 +408,27 @@ export const setupSpreadsheetDatabase = async (
     }
   }
 
-  // Re-fetch updated sheetIds for filter & freeze formatting
   const updatedMeta = await fetchSpreadsheetMetadata(token, spreadsheetId);
   const tabMap: Record<string, number> = {};
   (updatedMeta.sheets || []).forEach((s: any) => {
     tabMap[s.properties.title] = s.properties.sheetId;
   });
 
-  // 1. Write Dashboard_Ringkasan with live formulas
   const dashboardRows = [
-    ['MANAGEME! DATABASE DASHBOARD', 'NILAI LIVE', 'RUMUS / KETERANGAN'],
-    ['Terakhir Disinkronkan', new Date().toLocaleString('id-ID'), 'Timestamp sinkronisasi aplikasi'],
-    ['Total Pemasukan (IDR)', '=SUMIF(Keuangan_Transaksi!D2:D,"Pemasukan",Keuangan_Transaksi!H2:H)', 'SUMIF seluruh pemasukan'],
-    ['Total Pengeluaran (IDR)', '=SUMIF(Keuangan_Transaksi!D2:D,"Pengeluaran",Keuangan_Transaksi!H2:H)', 'SUMIF seluruh pengeluaran'],
+    ['MANAGEME! DATABASE TERPUSAT', 'NILAI LIVE', 'RUMUS / KETERANGAN'],
+    ['Terakhir Disinkronkan', new Date().toLocaleString('id-ID'), 'Timestamp sinkronisasi otomatis'],
+    ['Total Pemasukan (IDR)', '=SUMIF(Keuangan_Transaksi!E2:E,"Pemasukan",Keuangan_Transaksi!I2:I)', 'SUMIF seluruh pemasukan'],
+    ['Total Pengeluaran (IDR)', '=SUMIF(Keuangan_Transaksi!E2:E,"Pengeluaran",Keuangan_Transaksi!I2:I)', 'SUMIF seluruh pengeluaran'],
     ['Saldo Kas Bersih (IDR)', '=B3-B4', 'Total Pemasukan - Total Pengeluaran'],
-    ['Pemasukan Minggu Ini (IDR)', '=SUMIFS(Keuangan_Transaksi!H2:H,Keuangan_Transaksi!D2:D,"Pemasukan",Keuangan_Transaksi!C2:C,ISOWEEKNUM(TODAY()))', 'Pemasukan ISOWEEKNUM minggu berjalan'],
-    ['Pengeluaran Minggu Ini (IDR)', '=SUMIFS(Keuangan_Transaksi!H2:H,Keuangan_Transaksi!D2:D,"Pengeluaran",Keuangan_Transaksi!C2:C,ISOWEEKNUM(TODAY()))', 'Pengeluaran ISOWEEKNUM minggu berjalan'],
-    ['Total Nilai Stok KosMan (IDR)', '=SUM(KosMan_Inventaris!J2:J)', 'Akumulasi stok * harga satuan'],
+    ['Pengeluaran Minggu Ini (IDR)', '=SUMIFS(Keuangan_Transaksi!I2:I,Keuangan_Transaksi!E2:E,"Pengeluaran",Keuangan_Transaksi!D2:D,ISOWEEKNUM(TODAY()))', 'Pengeluaran ISOWEEKNUM minggu berjalan'],
+    ['Total Belanja KosMan (Histori)', '=SUM(KosMan_Riwayat_Beli!F2:F)', 'Akumulasi seluruh riwayat pembelian KosMan'],
     ['Jumlah Barang KosMan HABIS', '=COUNTIF(KosMan_Inventaris!K2:K,"HABIS")', 'Item stok = 0'],
     ['Jumlah Barang KosMan LOW', '=COUNTIF(KosMan_Inventaris!K2:K,"LOW")', 'Item stok <= minimum'],
-    ['Estimasi Biaya Wishlist Aktif', '=SUMIF(Wishlist_Belanja!H2:H,FALSE,Wishlist_Belanja!G2:G)', 'Total barang wishlist belum dibeli'],
-    ['Total Target Budget Mingguan', '=SUM(Kos_Budget_Simulasi!C2:C)', 'Total alokasi pos mingguan kos'],
+    ['Wishlist Belum Dibeli (Qty)', '=COUNTIF(Wishlist_Belanja!H2:H,FALSE)', 'Barang wishlist pending'],
+    ['Total Jatah Budget Mingguan', '=SUM(Keuangan_Budget_Pos!F2:F)', 'Total alokasi rasio mingguan'],
+    ['Total Catatan & Kegiatan', '=COUNTA(Kegiatan_Harian!A2:A)+COUNTA(Catatan_Pribadi!A2:A)', 'Total entri kegiatan + catatan'],
   ];
 
-  // 2. KosMan_Inventaris rows (with formulas Col J & Col K)
-  const kosHeader = [
-    'ID', 'Nama_Item', 'Kategori_Utama', 'Multi_Tags', 'Sub_Kategori',
-    'Stok', 'Satuan', 'Min_Stok', 'Harga_Satuan', 'Total_Nilai',
-    'Status_Stok', 'Catatan', 'Terakhir_Diubah'
-  ];
-  const kosRows = payload.items.map((item, idx) => {
-    const r = idx + 2;
-    const tagsStr = (item.tags && item.tags.length > 0 ? item.tags : [item.category]).join(', ');
-    return [
-      item.id,
-      item.name,
-      item.category,
-      tagsStr,
-      item.subCategory,
-      item.quantity,
-      item.unit,
-      item.minThreshold,
-      item.price,
-      `=F${r}*I${r}`,
-      `=IF(F${r}=0,"HABIS",IF(F${r}<=H${r},"LOW","AMAN"))`,
-      item.notes || '',
-      item.lastPurchasedDate || new Date().toISOString().split('T')[0],
-    ];
-  });
-
-  // 3. Wishlist_Belanja rows (Col G Subtotal formula)
-  const wishHeader = [
-    'ID', 'Nama_Barang', 'Kategori_Belanja', 'Sub_Kategori', 'Qty_Beli',
-    'Estimasi_Harga', 'Subtotal', 'Sudah_Dibeli', 'Prioritas', 'Sumber'
-  ];
-  const wishRows = payload.wishlist.map((w, idx) => {
-    const r = idx + 2;
-    return [
-      w.id,
-      w.name,
-      w.shoppingCategory,
-      w.subCategory || 'Umum',
-      w.quantity,
-      w.estimatedPrice,
-      `=E${r}*F${r}`,
-      w.purchased,
-      w.priority,
-      w.source,
-    ];
-  });
-
-  // 4. Keuangan_Transaksi rows (Col C ISOWEEKNUM formula)
-  const finHeader = [
-    'ID', 'Tanggal', 'Minggu_Ke', 'Tipe', 'Kategori',
-    'Sub_Kategori', 'Keterangan', 'Nominal', 'Akun', 'Sumber'
-  ];
-  const finRows = payload.financeRecords.map((f, idx) => {
-    const r = idx + 2;
-    return [
-      f.id,
-      f.date,
-      `=IF(B${r}="","",IFERROR(ISOWEEKNUM(DATEVALUE(B${r})),ISOWEEKNUM(TODAY())))`,
-      f.type === 'income' ? 'Pemasukan' : 'Pengeluaran',
-      f.category,
-      f.subCategory || '',
-      f.note,
-      f.amount,
-      f.account,
-      f.source || 'app',
-    ];
-  });
-
-  // 5. Kos_Budget_Simulasi rows (live REGEXMATCH + FILTER formula)
-  const budgetHeader = [
-    'ID', 'Pos_Anggaran', 'Budget_Mingguan', 'Alokasi_Persen',
-    'Terpakai_Minggu_Ini', 'Sisa_Budget', 'Kategori_Terkait_Regex', 'Status'
-  ];
-  const budgetRows = payload.budgetPos.map((p, idx) => {
-    const r = idx + 2;
-    const regexStr = p.linkedCategories.join('|');
-    return [
-      p.id,
-      p.name,
-      p.weeklyTarget,
-      p.allocationPercent,
-      `=IFERROR(SUM(FILTER(Keuangan_Transaksi!$H$2:$H,Keuangan_Transaksi!$D$2:$D="Pengeluaran",Keuangan_Transaksi!$C$2:$C=ISOWEEKNUM(TODAY()),REGEXMATCH(Keuangan_Transaksi!$E$2:$E,G${r}))),0)`,
-      `=C${r}-E${r}`,
-      regexStr,
-      `=IF(F${r}<0,"OVER","AMAN")`,
-    ];
-  });
-
-  // Clear existing ranges cleanly before batch writing
   await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchClear`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -254,9 +436,13 @@ export const setupSpreadsheetDatabase = async (
       ranges: [
         'Dashboard_Ringkasan!A1:C50',
         'KosMan_Inventaris!A1:M1000',
+        'KosMan_Riwayat_Beli!A1:I2000',
         'Wishlist_Belanja!A1:J1000',
-        'Keuangan_Transaksi!A1:J1000',
-        'Kos_Budget_Simulasi!A1:H100',
+        'Keuangan_Transaksi!A1:K2000',
+        'Keuangan_Budget_Pos!A1:J100',
+        'Kegiatan_Harian!A1:G1000',
+        'Catatan_Pribadi!A1:G1000',
+        'Waktu_Ibadah!A1:C50',
       ],
     }),
   });
@@ -270,10 +456,26 @@ export const setupSpreadsheetDatabase = async (
         valueInputOption: 'USER_ENTERED',
         data: [
           { range: 'Dashboard_Ringkasan!A1', values: dashboardRows },
-          { range: 'KosMan_Inventaris!A1', values: [kosHeader, ...kosRows] },
-          { range: 'Wishlist_Belanja!A1', values: [wishHeader, ...wishRows] },
-          { range: 'Keuangan_Transaksi!A1', values: [finHeader, ...finRows] },
-          { range: 'Kos_Budget_Simulasi!A1', values: [budgetHeader, ...budgetRows] },
+          { range: 'KosMan_Inventaris!A1', values: buildKosRows(payload.items) },
+          { range: 'KosMan_Riwayat_Beli!A1', values: buildKosHistoryRows(payload.items) },
+          { range: 'Wishlist_Belanja!A1', values: buildWishlistRows(payload.wishlist) },
+          { range: 'Keuangan_Transaksi!A1', values: buildFinanceRows(payload.financeRecords) },
+          { range: 'Keuangan_Budget_Pos!A1', values: buildBudgetRows(payload.budgetPos, payload.budgetConfig) },
+          {
+            range: 'Kegiatan_Harian!A1',
+            values: buildActivitiesRows(
+              payload.routines,
+              payload.prayers,
+              payload.goals,
+              payload.trips,
+              payload.workouts
+            ),
+          },
+          {
+            range: 'Catatan_Pribadi!A1',
+            values: buildNotesRows(payload.normalNotes, payload.igNotes, payload.personalNotes),
+          },
+          { range: 'Waktu_Ibadah!A1', values: buildWorshipRows(payload.worshipPref) },
         ],
       }),
     }
@@ -288,9 +490,12 @@ export const setupSpreadsheetDatabase = async (
   const formatRequests: any[] = [];
   const filterSpecs: [string, number][] = [
     ['KosMan_Inventaris', 13],
+    ['KosMan_Riwayat_Beli', 9],
     ['Wishlist_Belanja', 10],
-    ['Keuangan_Transaksi', 10],
-    ['Kos_Budget_Simulasi', 8],
+    ['Keuangan_Transaksi', 11],
+    ['Keuangan_Budget_Pos', 10],
+    ['Kegiatan_Harian', 7],
+    ['Catatan_Pribadi', 7],
   ];
 
   filterSpecs.forEach(([title, colCount]) => {
@@ -323,13 +528,20 @@ export const setupSpreadsheetDatabase = async (
   return true;
 };
 
-// Pull (Read) 2-way sync from Google Spreadsheet (reads edits made by ChatGPT or manually!)
-export const pullDatabaseFromSheets = async (token: string, spreadsheetId: string) => {
+// Pull (Read) 2-way sync from Google Spreadsheet across ALL modules
+export const pullDatabaseFromSheets = async (
+  token: string,
+  spreadsheetId: string
+): Promise<Partial<FullSpreadsheetPayload> & { counts: Record<string, number> }> => {
   const ranges = [
     'KosMan_Inventaris!A2:M1000',
+    'KosMan_Riwayat_Beli!A2:I2000',
     'Wishlist_Belanja!A2:J1000',
-    'Keuangan_Transaksi!A2:J1000',
-    'Kos_Budget_Simulasi!A2:H100',
+    'Keuangan_Transaksi!A2:K2000',
+    'Keuangan_Budget_Pos!A2:J100',
+    'Kegiatan_Harian!A2:G1000',
+    'Catatan_Pribadi!A2:G1000',
+    'Waktu_Ibadah!A2:C20',
   ];
 
   const query = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join('&');
@@ -352,11 +564,31 @@ export const pullDatabaseFromSheets = async (token: string, spreadsheetId: strin
     return parseFloat(cleaned) || 0;
   };
 
-  // 1. Parse KosMan_Inventaris
+  // 1. Parse Purchase History grouped by item ID or name
+  const rawHist: any[][] = valueRanges[1]?.values || [];
+  const histByItemId: Record<string, PurchaseHistoryEntry[]> = {};
+  rawHist
+    .filter((row) => row[2] || row[1])
+    .forEach((row, i) => {
+      const key = String(row[1] || row[2] || '').trim();
+      if (!histByItemId[key]) histByItemId[key] = [];
+      histByItemId[key].push({
+        id: String(row[0] || `hist-${Date.now()}-${i}`),
+        purchasedAt: String(row[3] || ''),
+        quantity: Math.max(1, parseNum(row[4])),
+        totalPrice: parseNum(row[5]),
+        account: (['Kas', 'Bank', 'E-Wallet'].includes(String(row[7])) ? String(row[7]) : 'Kas') as any,
+        note: String(row[8] || ''),
+      });
+    });
+
+  // 2. Parse KosMan_Inventaris
   const rawKos: any[][] = valueRanges[0]?.values || [];
   const items: KosItem[] = rawKos
     .filter((row) => row[1])
     .map((row, i) => {
+      const id = String(row[0] || `sheet-item-${Date.now()}-${i}`);
+      const name = String(row[1]).trim();
       const cat = normalizeKosCategory(row[2]);
       const tagsRaw = String(row[3] || '')
         .split(',')
@@ -364,26 +596,28 @@ export const pullDatabaseFromSheets = async (token: string, spreadsheetId: strin
         .filter(Boolean)
         .map(normalizeKosCategory);
       const tags: KosCategory[] = tagsRaw.length > 0 ? Array.from(new Set(tagsRaw)) : [cat];
+      const history = histByItemId[id] || histByItemId[name] || [];
 
       return {
-        id: String(row[0] || `sheet-item-${Date.now()}-${i}`),
-        name: String(row[1]).trim(),
+        id,
+        name,
         category: cat,
         tags,
         subCategory: String(row[4] || 'Umum').trim(),
         quantity: parseNum(row[5]),
         unit: String(row[6] || 'buah').trim(),
         minThreshold: parseNum(row[7]) || 1,
-        price: parseNum(row[8]),
-        timesPurchased: 0,
-        totalSpend: 0,
+        price: 0,
+        totalSpend: parseNum(row[8]),
+        timesPurchased: parseNum(row[9]) || history.length,
         notes: String(row[11] || ''),
-        lastPurchasedDate: String(row[12] || new Date().toISOString().split('T')[0]),
+        lastPurchasedDate: String(row[12] || ''),
+        purchaseHistory: history,
       };
     });
 
-  // 2. Parse Wishlist_Belanja
-  const rawWish: any[][] = valueRanges[1]?.values || [];
+  // 3. Parse Wishlist_Belanja
+  const rawWish: any[][] = valueRanges[2]?.values || [];
   const wishlist: WishlistItem[] = rawWish
     .filter((row) => row[1])
     .map((row, i) => ({
@@ -392,185 +626,203 @@ export const pullDatabaseFromSheets = async (token: string, spreadsheetId: strin
       shoppingCategory: normalizeKosCategory(row[2]),
       subCategory: String(row[3] || 'Umum').trim(),
       quantity: Math.max(1, parseNum(row[4])),
-      unit: 'pcs',
-      estimatedPrice: parseNum(row[5]),
+      unit: String(row[5] || 'buah').trim(),
+      estimatedPrice: parseNum(row[6]),
       purchased: String(row[7] || '').toUpperCase() === 'TRUE',
       priority: (['Wajib', 'Sedang', 'Keinginan'].includes(String(row[8])) ? String(row[8]) : 'Sedang') as any,
       source: (String(row[9] || 'sheets') as any),
       createdAt: Date.now() - i,
     }));
 
-  // 3. Parse Keuangan_Transaksi
-  const rawFin: any[][] = valueRanges[2]?.values || [];
+  // 4. Parse Keuangan_Transaksi
+  const rawFin: any[][] = valueRanges[3]?.values || [];
   const financeRecords: FinanceRecord[] = rawFin
-    .filter((row) => row[6] || row[7])
+    .filter((row) => row[7] || row[8])
     .map((row, i) => {
-      const tipeRaw = String(row[3] || '').toLowerCase();
+      const tipeRaw = String(row[4] || '').toLowerCase();
       const type = tipeRaw.includes('masuk') || tipeRaw === 'income' ? 'income' : 'expense';
-      const accRaw = String(row[8] || 'Kas');
+      const accRaw = String(row[9] || 'Kas');
       const account = (['Kas', 'Bank', 'E-Wallet'].includes(accRaw) ? accRaw : 'Kas') as any;
 
       return {
         id: String(row[0] || `sheet-fin-${Date.now()}-${i}`),
         date: String(row[1] || new Date().toISOString().split('T')[0]),
+        time: String(row[2] || ''),
         type,
-        category: String(row[4] || 'Lainnya').trim(),
-        subCategory: String(row[5] || '').trim(),
-        note: String(row[6] || 'Transaksi Sheets').trim(),
-        amount: parseNum(row[7]),
+        category: String(row[5] || 'Lainnya').trim(),
+        subCategory: String(row[6] || '').trim(),
+        note: String(row[7] || 'Transaksi Sheets').trim(),
+        amount: parseNum(row[8]),
         account,
-        source: (String(row[9] || 'sheets') as any),
+        source: (String(row[10] || 'sheets') as any),
         createdAt: Date.now() - i * 1000,
       };
     });
 
-  // 4. Parse Kos_Budget_Simulasi
-  const rawBudget: any[][] = valueRanges[3]?.values || [];
-  const palette = ['#00E5FF', '#FFD000', '#FF4B82', '#A3E635', '#A855F7'];
+  // 5. Parse Keuangan_Budget_Pos
+  const rawBudget: any[][] = valueRanges[4]?.values || [];
+  const palette = ['#FFD000', '#00E5FF', '#FF4B82', '#A3E635', '#A855F7'];
+  let budgetConfig: BudgetConfig | undefined;
   const budgetPos: BudgetPos[] = rawBudget
     .filter((row) => row[1])
-    .map((row, i) => ({
-      id: String(row[0] || `pos-${i}`),
-      name: String(row[1]).trim(),
-      weeklyTarget: parseNum(row[2]),
-      allocationPercent: parseNum(row[3]),
-      linkedCategories: String(row[6] || row[1])
-        .split('|')
-        .map((s) => s.trim())
-        .filter(Boolean),
-      color: palette[i % palette.length],
-    }));
+    .map((row, i) => {
+      if (i === 0 && (row[3] || row[4])) {
+        budgetConfig = {
+          periodType: String(row[3]).toLowerCase().includes('minggu') ? 'weekly' : 'monthly',
+          incomeAmount: parseNum(row[4]) || 1500000,
+        };
+      }
+      return {
+        id: String(row[0] || `pos-${i}`),
+        name: String(row[1]).trim(),
+        allocationPercent: parseNum(row[2]),
+        weeklyTarget: parseNum(row[5]),
+        linkedCategories: String(row[8] || row[1])
+          .split('|')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        color: palette[i % palette.length],
+      };
+    });
 
-  return { items, wishlist, financeRecords, budgetPos };
-};
+  // 6. Parse Kegiatan_Harian
+  const rawAct: any[][] = valueRanges[5]?.values || [];
+  const routines: RoutineActivity[] = [];
+  const prayers: MissedPrayer[] = [];
+  const goals: DailyGoal[] = [];
+  const trips: TripLog[] = [];
+  const workouts: WorkoutLog[] = [];
 
-// Append Row Helper
-export const appendSheetRow = async (
-  token: string,
-  spreadsheetId: string,
-  range: string,
-  values: any[][]
-) => {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ values }),
+  rawAct.forEach((row) => {
+    try {
+      if (row[6]) {
+        const parsed = JSON.parse(row[6]);
+        if (row[1] === 'Rutinitas') routines.push(parsed);
+        if (row[1] === 'Qadha_Shalat') prayers.push(parsed);
+        if (row[1] === 'Target_Harian') goals.push(parsed);
+        if (row[1] === 'Perjalanan') trips.push(parsed);
+        if (row[1] === 'Workout') workouts.push(parsed);
+      }
+    } catch {
+      // ignore malformed JSON row
+    }
   });
-  return await res.json();
+
+  // 7. Parse Catatan_Pribadi
+  const rawNotes: any[][] = valueRanges[6]?.values || [];
+  const normalNotes: NormalNote[] = [];
+  const igNotes: IGNote[] = [];
+  const personalNotes: PersonalNote[] = [];
+
+  rawNotes.forEach((row) => {
+    try {
+      if (row[6]) {
+        const parsed = JSON.parse(row[6]);
+        if (row[1] === 'Umum') normalNotes.push(parsed);
+        if (row[1] === 'IG_Music') igNotes.push(parsed);
+        if (row[1] === 'Pribadi') personalNotes.push(parsed);
+      }
+    } catch {
+      // ignore
+    }
+  });
+
+  // 8. Parse Waktu_Ibadah
+  const rawWorship: any[][] = valueRanges[7]?.values || [];
+  let worshipPref: WorshipPref | undefined;
+  if (rawWorship.length > 0) {
+    const cityRow = rawWorship.find((r) => String(r[0]).includes('Kota'));
+    const portalRow = rawWorship.find((r) => String(r[0]).includes('Portal'));
+    worshipPref = {
+      city: cityRow?.[1] || 'Jakarta',
+      portalUrl: portalRow?.[1] || 'https://waktuibadah.vercel.app',
+    };
+  }
+
+  return {
+    items,
+    wishlist,
+    financeRecords,
+    budgetPos,
+    budgetConfig,
+    routines: routines.length > 0 ? routines : undefined,
+    prayers: prayers.length > 0 ? prayers : undefined,
+    goals: goals.length > 0 ? goals : undefined,
+    trips: trips.length > 0 ? trips : undefined,
+    workouts: workouts.length > 0 ? workouts : undefined,
+    normalNotes: normalNotes.length > 0 ? normalNotes : undefined,
+    igNotes: igNotes.length > 0 ? igNotes : undefined,
+    personalNotes: personalNotes.length > 0 ? personalNotes : undefined,
+    worshipPref,
+    counts: {
+      items: items.length,
+      wishlist: wishlist.length,
+      finance: financeRecords.length,
+      activities: rawAct.length,
+      notes: rawNotes.length,
+    },
+  };
 };
 
-// Auto-sync a new Finance Record to Keuangan_Transaksi
-export const autoSyncFinanceToSheets = async (record: {
-  id: string;
-  date: string;
-  type: string;
-  category: string;
-  subCategory?: string;
-  amount: number;
-  note: string;
-  account: string;
-  source?: string;
-}) => {
+// Generic helper to replace a single tab cleanly during live online auto-sync
+const syncTabValues = async (tabName: string, clearRange: string, values: any[][]) => {
   const token = getAccessToken();
   const sheetId = getSpreadsheetId();
-  if (!token || !sheetId) return;
+  if (!token || !sheetId || !navigator.onLine) return;
 
   try {
-    await appendSheetRow(token, sheetId, 'Keuangan_Transaksi!A:J', [
-      [
-        record.id,
-        record.date,
-        `=IFERROR(ISOWEEKNUM(DATEVALUE("${record.date}")),ISOWEEKNUM(TODAY()))`,
-        record.type === 'income' ? 'Pemasukan' : 'Pengeluaran',
-        record.category,
-        record.subCategory || '',
-        record.note,
-        record.amount,
-        record.account,
-        record.source || 'app',
-      ],
-    ]);
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(clearRange)}:clear`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${tabName}!A1`)}?valueInputOption=USER_ENTERED`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values }),
+      }
+    );
   } catch (err) {
-    console.warn('Auto-sync finance row error:', err);
+    console.warn(`Live auto-sync (${tabName}) skipped/error:`, err);
   }
 };
 
-// Auto-sync a KosMan Item to KosMan_Inventaris
-export const autoSyncKosmanToSheets = async (item: KosItem) => {
-  const token = getAccessToken();
-  const sheetId = getSpreadsheetId();
-  if (!token || !sheetId) return;
-
-  try {
-    const tagsStr = (item.tags && item.tags.length > 0 ? item.tags : [item.category]).join(', ');
-    await appendSheetRow(token, sheetId, 'KosMan_Inventaris!A:M', [
-      [
-        item.id,
-        item.name,
-        item.category,
-        tagsStr,
-        item.subCategory,
-        item.quantity,
-        item.unit,
-        item.minThreshold,
-        item.price,
-        item.quantity * item.price,
-        item.quantity === 0 ? 'HABIS' : item.quantity <= item.minThreshold ? 'LOW' : 'AMAN',
-        item.notes || '',
-        item.lastPurchasedDate || new Date().toISOString().split('T')[0],
-      ],
-    ]);
-  } catch (err) {
-    console.warn('Auto-sync kosman row error:', err);
-  }
+export const autoSyncKosmanFullToSheets = (items: KosItem[]) => {
+  syncTabValues('KosMan_Inventaris', 'KosMan_Inventaris!A1:M1000', buildKosRows(items));
+  syncTabValues('KosMan_Riwayat_Beli', 'KosMan_Riwayat_Beli!A1:I2000', buildKosHistoryRows(items));
 };
 
-// Auto-sync a Wishlist Item to Wishlist_Belanja
-export const autoSyncWishlistToSheets = async (w: WishlistItem) => {
-  const token = getAccessToken();
-  const sheetId = getSpreadsheetId();
-  if (!token || !sheetId) return;
-
-  try {
-    await appendSheetRow(token, sheetId, 'Wishlist_Belanja!A:J', [
-      [
-        w.id,
-        w.name,
-        w.shoppingCategory,
-        w.subCategory || 'Umum',
-        w.quantity,
-        w.estimatedPrice,
-        w.quantity * w.estimatedPrice,
-        w.purchased,
-        w.priority,
-        w.source,
-      ],
-    ]);
-  } catch (err) {
-    console.warn('Auto-sync wishlist row error:', err);
-  }
+export const autoSyncWishlistFullToSheets = (wishlist: WishlistItem[]) => {
+  syncTabValues('Wishlist_Belanja', 'Wishlist_Belanja!A1:J1000', buildWishlistRows(wishlist));
 };
 
-// Keep activity helper compatible
-export const autoSyncActivityToSheets = async (activity: {
-  id: string;
-  date: string;
-  type: string;
-  title: string;
-  info: string;
-}) => {
-  const token = getAccessToken();
-  const sheetId = getSpreadsheetId();
-  if (!token || !sheetId) return;
-  try {
-    await appendSheetRow(token, sheetId, 'Keuangan_Transaksi!A:J', [
-      [activity.id, activity.date, `=ISOWEEKNUM(TODAY())`, 'Log', activity.type, '', `${activity.title} (${activity.info})`, 0, 'Kas', 'trip'],
-    ]);
-  } catch (err) {
-    console.warn('Auto-sync activity row error:', err);
-  }
+export const autoSyncFinanceFullToSheets = (financeRecords: FinanceRecord[]) => {
+  syncTabValues('Keuangan_Transaksi', 'Keuangan_Transaksi!A1:K2000', buildFinanceRows(financeRecords));
+};
+
+export const autoSyncBudgetFullToSheets = (budgetPos: BudgetPos[], budgetConfig: BudgetConfig) => {
+  syncTabValues('Keuangan_Budget_Pos', 'Keuangan_Budget_Pos!A1:J100', buildBudgetRows(budgetPos, budgetConfig));
+};
+
+export const autoSyncActivitiesFullToSheets = (
+  routines: RoutineActivity[],
+  prayers: MissedPrayer[],
+  goals: DailyGoal[],
+  trips: TripLog[],
+  workouts: WorkoutLog[]
+) => {
+  syncTabValues('Kegiatan_Harian', 'Kegiatan_Harian!A1:G1000', buildActivitiesRows(routines, prayers, goals, trips, workouts));
+};
+
+export const autoSyncNotesFullToSheets = (
+  normalNotes: NormalNote[],
+  igNotes: IGNote[],
+  personalNotes: PersonalNote[]
+) => {
+  syncTabValues('Catatan_Pribadi', 'Catatan_Pribadi!A1:G1000', buildNotesRows(normalNotes, igNotes, personalNotes));
+};
+
+export const autoSyncWorshipToSheets = (pref: WorshipPref) => {
+  syncTabValues('Waktu_Ibadah', 'Waktu_Ibadah!A1:C20', buildWorshipRows(pref));
 };

@@ -12,20 +12,30 @@ export type KosCategory =
 
 export type StockStatus = 'AMAN' | 'LOW' | 'HABIS';
 
+export interface PurchaseHistoryEntry {
+  id: string;
+  purchasedAt: string; // YYYY-MM-DD HH:mm
+  quantity: number;
+  totalPrice: number; // Total overall price paid for this transaction
+  account: 'Kas' | 'Bank' | 'E-Wallet';
+  note?: string;
+}
+
 export interface KosItem {
   id: string;
   name: string;
   category: KosCategory;
-  tags?: KosCategory[]; // Multi-tag kategori (contoh: Nugget -> ['Makanan', 'Keperluan Rumah Tangga'])
+  tags?: KosCategory[];
   subCategory: string;
   quantity: number;
   unit: string;
-  price: number; // in IDR
+  price: number; // Derived/latest unit estimate or 0 (transactions track totalPrice)
   timesPurchased: number;
   totalSpend: number;
   minThreshold: number;
-  lastPurchasedDate?: string;
+  lastPurchasedDate?: string; // YYYY-MM-DD or YYYY-MM-DD HH:mm
   notes?: string;
+  purchaseHistory?: PurchaseHistoryEntry[];
 }
 
 export type WishlistPriority = 'Wajib' | 'Sedang' | 'Keinginan';
@@ -50,11 +60,10 @@ export type SortOption =
   | 'name-asc'
   | 'name-desc'
   | 'quantity-asc'
-  | 'price-asc'
-  | 'price-desc'
+  | 'spend-desc'
   | 'timesPurchased-desc';
 
-// Finance & Kosan Budget Simulation Types
+// Finance & Simplified Kosan Budget Simulation Types
 export interface FinanceRecord {
   id: string;
   type: 'income' | 'expense';
@@ -64,7 +73,8 @@ export interface FinanceRecord {
   note: string;
   account: 'Kas' | 'Bank' | 'E-Wallet';
   date: string; // YYYY-MM-DD
-  source?: 'app' | 'ocr' | 'chatgpt' | 'sheets' | 'wishlist';
+  time?: string; // HH:mm
+  source?: 'app' | 'ocr' | 'chatgpt' | 'sheets' | 'wishlist' | 'kosman';
   createdAt: number;
 }
 
@@ -75,6 +85,11 @@ export interface BudgetPos {
   allocationPercent: number;
   linkedCategories: string[];
   color: string;
+}
+
+export interface BudgetConfig {
+  periodType: 'monthly' | 'weekly';
+  incomeAmount: number;
 }
 
 export interface DailyIncomeEntry {
@@ -175,6 +190,12 @@ export interface PersonalNote {
   extraNotes: string;
   customFields: { key: string; value: string }[];
   updatedAt: number;
+}
+
+export interface WorshipPref {
+  city: string;
+  portalUrl: string;
+  lastCheckedAt?: string;
 }
 
 export type ActiveAppView = 'hub' | 'kosman' | 'finance' | 'activities' | 'notes' | 'worship';

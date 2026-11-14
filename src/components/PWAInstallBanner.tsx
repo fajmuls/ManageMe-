@@ -13,6 +13,7 @@ export const PWAInstallButton: React.FC<{ compact?: boolean }> = ({ compact = fa
   if (isInstallable) {
     return (
       <button
+        type="button"
         onClick={install}
         className={`comic-button bg-[#FF4B82] text-white border border-black comic-shadow-sm font-black uppercase flex items-center gap-1 whitespace-nowrap shrink-0 ${
           compact ? 'px-1.5 py-0.5 rounded-md text-[9px] sm:text-[11px]' : 'px-3 py-1.5 rounded-lg text-xs'
@@ -27,9 +28,10 @@ export const PWAInstallButton: React.FC<{ compact?: boolean }> = ({ compact = fa
 
   if (isIOS) {
     return (
-      <>
+      <div className="inline-flex flex-col items-end">
         <button
-          onClick={() => setShowIOSGuide(true)}
+          type="button"
+          onClick={() => setShowIOSGuide((v) => !v)}
           className={`comic-button bg-white text-black border border-black comic-shadow-sm font-black uppercase flex items-center gap-1 whitespace-nowrap shrink-0 ${
             compact ? 'px-1.5 py-0.5 rounded-md text-[9px]' : 'px-3 py-1.5 rounded-lg text-xs'
           }`}
@@ -38,27 +40,22 @@ export const PWAInstallButton: React.FC<{ compact?: boolean }> = ({ compact = fa
           <span>Install iOS</span>
         </button>
 
+        {/* Inline accordion guide (No Pop-up Overlay) */}
         {showIOSGuide && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-            <div className="w-full max-w-sm rounded-xl bg-white border-2 border-black p-4 shadow-[4px_4px_0px_#000] space-y-3">
-              <div className="flex items-center justify-between border-b border-black pb-2">
-                <h3 className="text-sm font-black uppercase text-black">Pasang di iPhone / iPad</h3>
-                <button onClick={() => setShowIOSGuide(false)} className="font-bold text-xs">✕</button>
-              </div>
-              <p className="text-xs font-bold text-slate-700 leading-relaxed">
-                1. Ketuk tombol <strong>Share (Bagikan)</strong> di bilah Safari.<br />
-                2. Gulir ke bawah lalu pilih <strong>Add to Home Screen (Tambah ke Layar Utama)</strong>.
-              </p>
-              <button
-                onClick={() => setShowIOSGuide(false)}
-                className="w-full rounded-lg bg-[#FFD000] border border-black py-1.5 text-xs font-black text-black uppercase"
-              >
-                Mengerti
+          <div className="mt-1.5 w-64 rounded-xl bg-white border-2 border-black p-2.5 shadow-[3px_3px_0px_#000] space-y-2 text-left">
+            <div className="flex items-center justify-between border-b border-black pb-1">
+              <span className="text-[11px] font-black uppercase text-black">Pasang di iPhone / iPad</span>
+              <button type="button" onClick={() => setShowIOSGuide(false)} className="font-bold text-xs">
+                Tutup
               </button>
             </div>
+            <p className="text-[11px] font-bold text-slate-700 leading-relaxed">
+              1. Ketuk tombol <strong>Share (Bagikan)</strong> di Safari.<br />
+              2. Pilih <strong>Add to Home Screen</strong>.
+            </p>
           </div>
         )}
-      </>
+      </div>
     );
   }
 
@@ -71,8 +68,10 @@ export const OfflineIndicator: React.FC = () => {
   if (isOnline) return null;
 
   return (
-    <div className="fixed bottom-3 left-3 z-50 flex items-center gap-1.5 rounded-lg bg-[#FFD000] border border-black px-2.5 py-1 text-[10px] font-black text-black shadow-[2px_2px_0px_#000]">
-      <span>Mode Offline — Menggunakan data lokal browser</span>
+    <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 pt-2">
+      <div className="rounded-lg bg-[#FFD000] border-2 border-black px-3 py-1.5 text-[11px] font-black text-black shadow-[2px_2px_0px_#000]">
+        Mode Offline — Perubahan disimpan lokal browser & akan perlu disinkronkan saat online kembali.
+      </div>
     </div>
   );
 };

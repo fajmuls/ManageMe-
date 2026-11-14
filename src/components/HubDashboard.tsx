@@ -2,7 +2,7 @@ import React from 'react';
 import { KosItem, FinanceRecord, RoutineActivity, MissedPrayer, NormalNote } from '../types/kosman';
 import { 
   IconHome, IconWallet, IconCalendar, IconNote, 
-  IconArrowRight, IconSparkles, IconBot, IconSheet 
+  IconArrowRight, IconSparkles, IconBot, IconMoon 
 } from './icons/SvgIcons';
 import { ActiveAppView } from './Navbar';
 
@@ -300,7 +300,7 @@ export const HubDashboard: React.FC<HubDashboardProps> = ({
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <div className="w-7 h-7 bg-[#10B981] border border-black rounded-lg comic-shadow-sm flex items-center justify-center text-white">
-                  <span className="text-sm">🕌</span>
+                  <IconMoon className="w-3.5 h-3.5" />
                 </div>
                 <span className="text-[8px] font-black uppercase bg-[#FFFDF6] border border-black px-1 rounded text-slate-700">M5</span>
               </div>
@@ -318,8 +318,8 @@ export const HubDashboard: React.FC<HubDashboardProps> = ({
                   <span className="font-mono text-emerald-700">waktuibadah</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-600">Mode:</span>
-                  <span className="font-mono text-black">Fullscreen</span>
+                  <span className="text-slate-600">Sync:</span>
+                  <span className="font-mono text-black">Google Sheet</span>
                 </div>
               </div>
             </div>
