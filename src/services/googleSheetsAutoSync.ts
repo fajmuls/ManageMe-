@@ -42,6 +42,14 @@ const provider = new GoogleAuthProvider();
 SCOPES.forEach((s) => provider.addScope(s));
 provider.setCustomParameters({ prompt: 'select_account' });
 
+export const OAUTH_RETURN_PANEL_KEY = 'manageme_oauth_return_panel';
+export const VERCEL_PRODUCTION_DOMAIN = 'manageme-seven.vercel.app';
+export const FIREBASE_CONSOLE_INFO = {
+  projectId: firebaseConfig.projectId,
+  authDomain: firebaseConfig.authDomain,
+  oAuthClientId: (firebaseConfig as any).oAuthClientId || '',
+};
+
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
 let cachedUserEmail: string | null = null;
@@ -71,6 +79,7 @@ const loadGisScript = (): Promise<void> =>
     if ((window as any).google?.accounts?.oauth2) return resolve();
     const existing = document.querySelector('script[data-gis-client="true"]') as HTMLScriptElement | null;
     if (existing) {
+      if ((window as any).google?.accounts?.oauth2) return resolve();
       existing.addEventListener('load', () => resolve(), { once: true });
       existing.addEventListener('error', () => reject(new Error('Gagal memuat Google Identity Services')), { once: true });
       return;
@@ -85,64 +94,126 @@ const loadGisScript = (): Promise<void> =>
     document.head.appendChild(script);
   });
 
-// Fallback langsung via Google Identity Services OAuth2 Token Client (memakai oAuthClientId, tanpa Firestore)
-const requestGisTokenFallback = async (): Promise<{
+const fetchGoogleEmailFromToken = async (accessToken: string): Promise<string> => {
+  try {
+    const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (profileRes.ok) {
+      const profile = await profileRes.json();
+      if (profile?.email) return profile.email;
+    }
+  } catch {
+    // ignore userinfo failure; token is still valid for Sheets
+  }
+  return 'Google Account';
+};
+
+// Pop-up langsung via Google Identity Services OAuth2 Token Client (lebih tahan lama saat melewati konfirmasi "belum diverifikasi Google")
+export const googleSignInWithGis = async (): Promise<{
   email: string;
   accessToken: string;
+  spreadsheetId: string;
 }> => {
   const clientId = (firebaseConfig as any).oAuthClientId;
   if (!clientId) {
     throw new Error('oAuthClientId belum tersedia di konfigurasi applet.');
   }
-  await loadGisScript();
-  const tokenResp = await new Promise<{ access_token: string }>((resolve, reject) => {
-    const oauth2 = (window as any).google?.accounts?.oauth2;
-    if (!oauth2) {
-      reject(new Error('Google Identity OAuth2 tidak tersedia di browser ini.'));
-      return;
-    }
-    const client = oauth2.initTokenClient({
-      client_id: clientId,
-      scope: `${SCOPES.join(' ')} https://www.googleapis.com/auth/userinfo.email`,
-      callback: (resp: any) => {
-        if (resp?.error) {
-          reject(new Error(resp.error_description || resp.error || 'OAuth dibatalkan'));
-          return;
-        }
-        if (!resp?.access_token) {
-          reject(new Error('Token akses Google tidak diterima.'));
-          return;
-        }
-        resolve(resp);
-      },
-      error_callback: (err: any) => {
-        reject(new Error(err?.message || 'Pop-up Google Login diblokir oleh browser.'));
-      },
-    });
-    client.requestAccessToken({ prompt: 'consent select_account' });
-  });
-
-  let email = 'Google Account';
-  try {
-    const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: `Bearer ${tokenResp.access_token}` },
-    });
-    if (profileRes.ok) {
-      const profile = await profileRes.json();
-      if (profile?.email) email = profile.email;
-    }
-  } catch {
-    // ignore userinfo failure; token is still valid for Sheets
+  if (isSigningIn) {
+    throw new Error('Proses login lain masih berlangsung. Selesaikan jendela login yang terbuka atau tunggu sebentar.');
   }
 
-  return { email, accessToken: tokenResp.access_token };
+  try {
+    isSigningIn = true;
+    await loadGisScript();
+    const tokenResp = await new Promise<{ access_token: string }>((resolve, reject) => {
+      const oauth2 = (window as any).google?.accounts?.oauth2;
+      if (!oauth2) {
+        reject(new Error('Google Identity OAuth2 tidak tersedia di browser ini.'));
+        return;
+      }
+      const client = oauth2.initTokenClient({
+        client_id: clientId,
+        scope: `${SCOPES.join(' ')} https://www.googleapis.com/auth/userinfo.email`,
+        callback: (resp: any) => {
+          if (resp?.error) {
+            reject(new Error(resp.error_description || resp.error || 'OAuth dibatalkan oleh pengguna.'));
+            return;
+          }
+          if (!resp?.access_token) {
+            reject(new Error('Token akses Google tidak diterima.'));
+            return;
+          }
+          resolve(resp);
+        },
+        error_callback: (err: any) => {
+          const errType = err?.type || '';
+          if (errType === 'popup_failed_to_open') {
+            reject(
+              new Error(
+                'Pop-up Google Login diblokir browser. Gunakan tombol "Mode Redirect (Anti Pop-Up)" atau buka di Tab Baru.'
+              )
+            );
+            return;
+          }
+          if (errType === 'popup_closed') {
+            reject(
+              new Error(
+                'Jendela pop-up GIS ditutup sebelum selesai. Jika proses "Lanjutan" Google lama, gunakan "Mode Redirect (Anti Pop-Up)".'
+              )
+            );
+            return;
+          }
+          reject(new Error(err?.message || 'Gagal membuka pop-up Google Identity Services.'));
+        },
+      });
+      client.requestAccessToken({ prompt: 'consent select_account' });
+    });
+
+    const email = await fetchGoogleEmailFromToken(tokenResp.access_token);
+    cachedAccessToken = tokenResp.access_token;
+    cachedUserEmail = email;
+    return { email, accessToken: tokenResp.access_token, spreadsheetId: getSpreadsheetId() };
+  } finally {
+    isSigningIn = false;
+  }
 };
 
 export const initGoogleAuth = (
   onAuthSuccess?: (email: string, token: string) => void,
-  onAuthFailure?: () => void
+  onAuthFailure?: () => void,
+  onAuthError?: (message: string) => void
 ) => {
-  // Cek apakah baru kembali dari alur redirect login
+  if (typeof window !== 'undefined') {
+    // Preload GIS script awal agar klik tombol tidak kehilangan user-gesture
+    loadGisScript().catch(() => {});
+
+    // 1. Cek jika baru kembali dari Direct Google OAuth2 Redirect (#access_token=... atau #error=...)
+    const rawHash = window.location.hash;
+    if (rawHash && (rawHash.includes('access_token=') || rawHash.includes('error='))) {
+      const params = new URLSearchParams(rawHash.replace(/^#/, ''));
+      const hashToken = params.get('access_token');
+      const hashError = params.get('error');
+      const hashState = params.get('state');
+
+      if (hashState === 'manageme_oauth' || hashToken) {
+        // Segera bersihkan token dari URL bar (tidak disimpan ke localStorage/sessionStorage)
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+
+        if (hashToken) {
+          cachedAccessToken = hashToken;
+          fetchGoogleEmailFromToken(hashToken).then((email) => {
+            cachedUserEmail = email;
+            if (onAuthSuccess) onAuthSuccess(email, hashToken);
+          });
+        } else if (hashError && onAuthError) {
+          onAuthError(`Login OAuth Redirect dibatalkan atau ditolak (${hashError}).`);
+        }
+      }
+    }
+  }
+
+  // 2. Cek apakah baru kembali dari alur Firebase signInWithRedirect
   getRedirectResult(auth)
     .then((result) => {
       if (result) {
@@ -151,10 +222,21 @@ export const initGoogleAuth = (
           cachedAccessToken = credential.accessToken;
           cachedUserEmail = result.user.email || 'Google Account';
           if (onAuthSuccess) onAuthSuccess(cachedUserEmail, cachedAccessToken);
+        } else if (onAuthError) {
+          onAuthError('Login berhasil tetapi token izin Spreadsheet tidak diterima. Pastikan semua kotak izin dicentang lalu klik Lanjutkan.');
         }
       }
     })
-    .catch(() => {});
+    .catch((err: any) => {
+      const code = err?.code || '';
+      if (code === 'auth/unauthorized-domain' && onAuthError) {
+        onAuthError(
+          `Domain "${window.location.hostname}" belum ditambahkan ke Firebase Authentication → Authorized domains.`
+        );
+      } else if (err?.message && onAuthError) {
+        onAuthError(err.message);
+      }
+    });
 
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (cachedAccessToken) {
@@ -174,13 +256,16 @@ export const googleSignIn = async (): Promise<{
   accessToken: string;
   spreadsheetId: string;
 } | null> => {
+  if (isSigningIn) {
+    throw new Error('Jendela login sedang diproses. Selesaikan login di pop-up atau tunggu beberapa detik.');
+  }
   try {
     isSigningIn = true;
     try {
       const result = await signInWithPopup(auth, provider);
       const credential = GoogleAuthProvider.credentialFromResult(result);
       if (!credential?.accessToken) {
-        throw new Error('Token akses Google Sheets tidak diterima dari Firebase Auth');
+        throw new Error('Token akses Google Sheets tidak diterima. Pastikan Anda mencentang seluruh izin Spreadsheet pada layar persetujuan.');
       }
       cachedAccessToken = credential.accessToken;
       cachedUserEmail = result.user.email || 'Google Account';
@@ -198,23 +283,29 @@ export const googleSignIn = async (): Promise<{
         code === 'auth/web-storage-unsupported';
 
       if (shouldFallbackToGis) {
-        const gis = await requestGisTokenFallback();
-        cachedAccessToken = gis.accessToken;
-        cachedUserEmail = gis.email;
-        return {
-          email: gis.email,
-          accessToken: gis.accessToken,
-          spreadsheetId: getSpreadsheetId(),
-        };
+        try {
+          isSigningIn = false;
+          return await googleSignInWithGis();
+        } catch (gisErr: any) {
+          if (code === 'auth/unauthorized-domain') {
+            const host = typeof window !== 'undefined' ? window.location.hostname : VERCEL_PRODUCTION_DOMAIN;
+            throw new Error(
+              `Domain "${host}" belum didaftarkan di Firebase Authentication (Authorized domains). Gunakan panduan di bawah atau coba "Mode Redirect" setelah mendaftarkan domain.`
+            );
+          }
+          throw gisErr;
+        }
       }
 
       if (code === 'auth/popup-blocked') {
         throw new Error(
-          'Pop-up login diblokir oleh browser/iframe. Izinkan pop-up atau klik "Buka App di Tab Baru" di panel ini lalu coba Sign in lagi.'
+          'Pop-up login diblokir oleh browser/iframe. Gunakan tombol "Mode Redirect (Anti Pop-Up)" atau buka di Tab Baru.'
         );
       }
       if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
-        throw new Error('Jendela login Google ditutup sebelum selesai. Silakan coba lagi.');
+        throw new Error(
+          'Jendela pop-up login Google terputus/ditutup sebelum selesai (sering terjadi saat melewati layar "Google belum memverifikasi aplikasi ini" yang prosesnya lama). Gunakan "Mode Redirect (Anti Pop-Up)" atau "Pop-Up GIS" di bawah agar tidak terputus!'
+        );
       }
 
       throw new Error(firebaseErr?.message || 'Gagal login Google Workspace.');
@@ -225,7 +316,40 @@ export const googleSignIn = async (): Promise<{
 };
 
 export const googleSignInRedirect = async () => {
+  if (typeof window !== 'undefined') {
+    if (window.self !== window.top) {
+      throw new Error(
+        'Mode Redirect tidak bisa berjalan di dalam iframe pratinjau. Klik tombol "Buka App di Tab Baru" terlebih dahulu, lalu tekan "Mode Redirect (Anti Pop-Up)".'
+      );
+    }
+    localStorage.setItem(OAUTH_RETURN_PANEL_KEY, 'sheets');
+  }
   await signInWithRedirect(auth, provider);
+};
+
+export const googleSignInDirectOAuthRedirect = () => {
+  if (typeof window === 'undefined') return;
+  if (window.self !== window.top) {
+    throw new Error(
+      'OAuth Redirect tidak bisa berjalan di dalam iframe pratinjau. Klik "Buka App di Tab Baru" terlebih dahulu.'
+    );
+  }
+  const clientId = (firebaseConfig as any).oAuthClientId;
+  if (!clientId) {
+    throw new Error('oAuthClientId belum tersedia.');
+  }
+  localStorage.setItem(OAUTH_RETURN_PANEL_KEY, 'sheets');
+  const redirectUri = `${window.location.origin}/`;
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'token',
+    scope: `${SCOPES.join(' ')} https://www.googleapis.com/auth/userinfo.email`,
+    include_granted_scopes: 'true',
+    prompt: 'consent select_account',
+    state: 'manageme_oauth',
+  });
+  window.location.assign(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
 };
 
 export const getAccessToken = (): string | null => cachedAccessToken;

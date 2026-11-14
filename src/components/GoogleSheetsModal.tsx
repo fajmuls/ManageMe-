@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { IconSheet, IconDownload, IconCopy, IconCheck, IconSparkles } from './icons/SvgIcons';
-import { InlineConfirmBar, InlineNotice } from './InlineUI';
+import { InlineConfirmBar, InlineNotice, PopupModal } from './InlineUI';
 import {
   googleSignIn,
+  googleSignInWithGis,
   googleSignInRedirect,
+  googleSignInDirectOAuthRedirect,
   googleSignOut,
   getAccessToken,
   getConnectedEmail,
@@ -12,9 +14,11 @@ import {
   setupSpreadsheetDatabase,
   pullDatabaseFromSheets,
   initGoogleAuth,
+  VERCEL_PRODUCTION_DOMAIN,
+  FIREBASE_CONSOLE_INFO,
   FullSpreadsheetPayload,
 } from '../services/googleSheetsAutoSync';
-import { ExternalLink, RefreshCw } from 'lucide-react';
+import { ExternalLink, RefreshCw, ShieldAlert } from 'lucide-react';
 
 interface GoogleSheetsModalProps {
   isOpen: boolean;
@@ -24,8 +28,7 @@ interface GoogleSheetsModalProps {
 }
 
 /**
- * Panel "Set Spreadsheet Saya" menyatu langsung di dalam website (inline in-flow, bukan pop-up).
- * Menggunakan Google Workspace OAuth + LocalStorage (tanpa Firestore).
+ * Pop-up Overlay "Set Spreadsheet Saya" (Local Storage + Google Sheets 9-Tab Sync, tanpa Firestore).
  */
 export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
   isOpen,
@@ -35,11 +38,13 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
 }) => {
   const [copiedTSV, setCopiedTSV] = useState(false);
   const [copiedFinanceTSV, setCopiedFinanceTSV] = useState(false);
+  const [copiedDomain, setCopiedDomain] = useState(false);
   const [sheetIdInput, setSheetIdInput] = useState(getSpreadsheetId());
   const [isConnected, setIsConnected] = useState(!!getAccessToken());
   const [userEmail, setUserEmail] = useState<string | null>(getConnectedEmail());
   const [isBusy, setIsBusy] = useState(false);
   const [showRedirectHint, setShowRedirectHint] = useState(false);
+  const [showVercelGuide, setShowVercelGuide] = useState(false);
   const [pendingConfirmAction, setPendingConfirmAction] = useState<'setup' | 'pull' | null>(null);
   const [statusMessage, setStatusMessage] = useState<{
     type: 'success' | 'error' | 'info';
@@ -52,30 +57,42 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
         setIsConnected(!!token);
         setUserEmail(email);
         setShowRedirectHint(false);
+        if (token) {
+          setStatusMessage({
+            type: 'success',
+            text: `Berhasil login sebagai ${email}. Sinkronisasi Spreadsheet 2-arah aktif.`,
+          });
+        }
       },
       () => {
         setIsConnected(!!getAccessToken());
         if (!getAccessToken()) setUserEmail(null);
+      },
+      (errMsg) => {
+        setStatusMessage({ type: 'error', text: errMsg });
+        setShowRedirectHint(true);
+        if (errMsg.toLowerCase().includes('domain') || errMsg.toLowerCase().includes('unauthorized')) {
+          setShowVercelGuide(true);
+        }
       }
     );
     return () => unsub();
   }, []);
 
-  if (!isOpen) return null;
-
   const activeSpreadsheetId = getSpreadsheetId();
   const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${activeSpreadsheetId}/edit`;
   const isInsideIframe = typeof window !== 'undefined' && window.self !== window.top;
+  const currentHost = typeof window !== 'undefined' ? window.location.hostname : VERCEL_PRODUCTION_DOMAIN;
 
   const handleGoogleLogin = async () => {
     setIsBusy(true);
     setStatusMessage(null);
-    setShowRedirectHint(false);
     try {
       const res = await googleSignIn();
       if (res) {
         setIsConnected(true);
         setUserEmail(res.email);
+        setShowRedirectHint(false);
         setStatusMessage({
           type: 'success',
           text: `Berhasil login sebagai ${res.email}. Sekarang Anda bisa menekan "Setup 9 Tab Database + Rumus" atau "Tarik Data Terbaru".`,
@@ -84,12 +101,57 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
     } catch (err: any) {
       const msg = err?.message || 'Gagal login Google Workspace.';
       setStatusMessage({ type: 'error', text: msg });
-      if (msg.toLowerCase().includes('pop-up') || msg.toLowerCase().includes('popup')) {
-        setShowRedirectHint(true);
+      setShowRedirectHint(true);
+      if (msg.toLowerCase().includes('domain') || msg.toLowerCase().includes('unauthorized')) {
+        setShowVercelGuide(true);
       }
     } finally {
       setIsBusy(false);
     }
+  };
+
+  const handleGisLogin = async () => {
+    setIsBusy(true);
+    setStatusMessage(null);
+    try {
+      const res = await googleSignInWithGis();
+      setIsConnected(true);
+      setUserEmail(res.email);
+      setShowRedirectHint(false);
+      setStatusMessage({
+        type: 'success',
+        text: `Berhasil login via GIS sebagai ${res.email}. Sinkronisasi Spreadsheet aktif.`,
+      });
+    } catch (err: any) {
+      const msg = err?.message || 'Gagal login via Google Identity Services.';
+      setStatusMessage({ type: 'error', text: msg });
+      setShowRedirectHint(true);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleRedirectLogin = async (useDirectOAuth = false) => {
+    setIsBusy(true);
+    setStatusMessage(null);
+    try {
+      if (useDirectOAuth) {
+        googleSignInDirectOAuthRedirect();
+      } else {
+        await googleSignInRedirect();
+      }
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: err?.message || 'Gagal memulai login Mode Redirect.' });
+      setShowRedirectHint(true);
+      setIsBusy(false);
+    }
+  };
+
+  const handleCopyDomain = (domainText: string) => {
+    navigator.clipboard.writeText(domainText);
+    setCopiedDomain(true);
+    setStatusMessage({ type: 'info', text: `Domain "${domainText}" disalin ke clipboard.` });
+    setTimeout(() => setCopiedDomain(false), 2500);
   };
 
   const handleSaveSheetId = () => {
@@ -221,33 +283,17 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
   };
 
   return (
-    <section className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 pt-3">
-      <div className="bg-white border-2 border-black rounded-xl p-3.5 sm:p-5 shadow-[4px_4px_0px_#000] space-y-3">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b-2 border-black pb-2">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-[#A3E635] border border-black rounded-lg flex items-center justify-center font-black shadow-[1.5px_1.5px_0px_#000]">
-              <IconSheet className="w-4 h-4 text-black" />
-            </div>
-            <div>
-              <h3 className="font-display font-black text-sm sm:text-base uppercase text-black leading-none">
-                SET SPREADSHEET SAYA (LOCAL STORAGE + GOOGLE SHEETS)
-              </h3>
-              <span className="text-[10px] font-bold text-slate-600">
-                Tanpa Firestore · Data lokal + sinkron otomatis 9 tab Spreadsheet setelah login Google
-              </span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-2.5 py-1 bg-slate-100 border border-black rounded-lg text-xs font-black text-black"
-          >
-            Tutup
-          </button>
-        </div>
-
-        {/* Inline Status Notice */}
+    <PopupModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="SET SPREADSHEET SAYA (LOCAL STORAGE + GOOGLE SHEETS)"
+      subtitle="Tanpa Firestore · Data lokal + sinkron otomatis 9 tab Spreadsheet setelah login Google"
+      icon={<IconSheet className="w-4 h-4 text-black" />}
+      headerBg="bg-[#A3E635]"
+      maxWidthClass="max-w-2xl"
+    >
+      <div className="space-y-3">
+        {/* Pop-up Status Toast Notice */}
         {statusMessage && (
           <InlineNotice
             type={statusMessage.type}
@@ -256,31 +302,52 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
           />
         )}
 
-        {/* Popup-Blocked / Iframe Fallback Help */}
-        {showRedirectHint && (
-          <div className="bg-[#FFD000]/30 border-2 border-black rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2 text-xs font-bold">
-            <span>
-              Jika pop-up login diblokir oleh pratinjau/iframe, buka aplikasi di tab baru atau coba mode redirect:
-            </span>
+        {/* Popup-Blocked / Slow Unverified Flow Fallback Help */}
+        {showRedirectHint && !isConnected && (
+          <div className="bg-[#FFD000]/30 border-2 border-black rounded-xl p-2.5 space-y-2 text-xs font-bold">
+            <div className="text-[11px] leading-snug text-slate-900">
+              <strong>Tips Login Jika Jendela Tertutup / Lama ("Belum Diverifikasi Google"):</strong>{' '}
+              Pada layar peringatan Google klik <em>Lanjutan (Advanced) → Buka aplikasi (tidak aman) → Centang izin Spreadsheet → Lanjutkan</em>. Agar tidak terputus di tengah jalan:
+            </div>
             <div className="flex flex-wrap gap-1.5">
-              {typeof window !== 'undefined' && (
+              <button
+                type="button"
+                onClick={handleGisLogin}
+                disabled={isBusy}
+                className="px-2.5 py-1 bg-[#00E5FF] border border-black rounded-lg text-[11px] font-black text-black disabled:opacity-50"
+              >
+                Coba Pop-Up GIS (Tahan Lama)
+              </button>
+              {isInsideIframe && typeof window !== 'undefined' ? (
                 <a
                   href={window.location.href}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-2.5 py-1 bg-black text-white rounded-lg text-[11px] font-black flex items-center gap-1"
                 >
-                  <span>Buka App di Tab Baru</span>
+                  <span>Buka di Tab Baru (Rekomendasi)</span>
                   <ExternalLink className="w-3 h-3" />
                 </a>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleRedirectLogin(false)}
+                    disabled={isBusy}
+                    className="px-2.5 py-1 bg-black text-white rounded-lg text-[11px] font-black disabled:opacity-50"
+                  >
+                    Mode Redirect (Anti Pop-Up)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRedirectLogin(true)}
+                    disabled={isBusy}
+                    className="px-2.5 py-1 bg-white border border-black rounded-lg text-[11px] font-black text-black disabled:opacity-50"
+                  >
+                    Redirect OAuth Langsung
+                  </button>
+                </>
               )}
-              <button
-                type="button"
-                onClick={() => googleSignInRedirect()}
-                className="px-2.5 py-1 bg-white border border-black rounded-lg text-[11px] font-black text-black"
-              >
-                Login Mode Redirect
-              </button>
             </div>
           </div>
         )}
@@ -311,23 +378,33 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
 
         {/* LANGKAH 1: LOGIN GOOGLE */}
         <div
-          className={`border-2 border-black p-3 rounded-xl space-y-2 ${
+          className={`border-2 border-black p-3 rounded-xl space-y-2.5 ${
             isConnected ? 'bg-[#A3E635]/20' : 'bg-[#FFD000]/25'
           }`}
         >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <span className="text-[10px] font-black uppercase text-black block">
-                Langkah 1: Login Akun Google (Izin Baca/Tulis Spreadsheet)
-              </span>
-              <p className="text-[11px] font-bold text-slate-700">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="flex-1 min-w-[200px]">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-black uppercase text-black">
+                  Langkah 1: Login Akun Google (Izin Baca/Tulis Spreadsheet)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowVercelGuide((v) => !v)}
+                  className="text-[10px] font-black underline text-slate-700 hover:text-black flex items-center gap-0.5"
+                >
+                  <ShieldAlert className="w-3 h-3" />
+                  <span>{showVercelGuide ? 'Tutup Panduan Vercel' : 'Panduan Domain Vercel'}</span>
+                </button>
+              </div>
+              <p className="text-[11px] font-bold text-slate-700 mt-0.5">
                 {isConnected
                   ? `Terhubung sebagai ${userEmail || 'Google Account'}. Sinkronisasi otomatis aktif.`
-                  : 'Wajib login Google sekali setiap membuka tab agar aplikasi diizinkan mengedit Spreadsheet Anda.'}
+                  : 'Jika pop-up Google tertutup saat proses "Lanjutan" lama, gunakan Pop-Up GIS atau Mode Redirect (di Tab Penuh / Vercel).'}
               </p>
             </div>
 
-            {isConnected ? (
+            {isConnected && (
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-black bg-[#A3E635] border border-black px-2 py-1 rounded text-black">
                   TERHUBUNG: {userEmail || 'Google Account'}
@@ -344,37 +421,94 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
                   Putus / Ganti Akun
                 </button>
               </div>
-            ) : (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleGoogleLogin}
-                  disabled={isBusy}
-                  className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-900 border-2 border-black px-3.5 py-1.5 rounded-lg text-xs font-black shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-50"
-                >
-                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 48 48">
-                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
-                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
-                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
-                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
-                  </svg>
-                  <span>{isBusy ? 'Membuka Login...' : 'Sign in with Google'}</span>
-                </button>
-                {isInsideIframe && typeof window !== 'undefined' && (
-                  <a
-                    href={window.location.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2.5 py-1.5 bg-slate-900 text-white border border-black rounded-lg text-[10px] font-black flex items-center gap-1"
-                    title="Jika pop-up diblokir iframe AI Studio, buka di tab penuh"
-                  >
-                    <span>Tab Baru</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                )}
-              </div>
             )}
           </div>
+
+          {!isConnected && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleGoogleLogin}
+                disabled={isBusy}
+                className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-900 border-2 border-black px-3.5 py-1.5 rounded-lg text-xs font-black shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-50"
+              >
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 48 48">
+                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+                  <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+                </svg>
+                <span>{isBusy ? 'Memproses Login...' : 'Sign in with Google'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleGisLogin}
+                disabled={isBusy}
+                className="px-2.5 py-1.5 bg-[#00E5FF] text-black border-2 border-black rounded-lg text-[11px] font-black shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-50"
+                title="Menggunakan Google Identity Services langsung tanpa timeout popup Firebase"
+              >
+                Pop-Up GIS (Tahan Lama)
+              </button>
+
+              {isInsideIframe && typeof window !== 'undefined' ? (
+                <a
+                  href={window.location.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2.5 py-1.5 bg-slate-900 text-white border-2 border-black rounded-lg text-[11px] font-black flex items-center gap-1 shadow-[2px_2px_0px_#000]"
+                  title="Buka aplikasi di tab browser penuh agar Mode Redirect berfungsi tanpa terblokir iframe"
+                >
+                  <span>Tab Baru</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleRedirectLogin(false)}
+                  disabled={isBusy}
+                  className="px-2.5 py-1.5 bg-slate-900 text-white border-2 border-black rounded-lg text-[11px] font-black shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-50"
+                  title="Login satu tab tanpa jendela pop-up (anti jendela tertutup saat verifikasi lama)"
+                >
+                  Mode Redirect (Anti Pop-Up)
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Panduan Konfigurasi Domain Vercel & Firebase */}
+          {showVercelGuide && (
+            <div className="bg-white border-2 border-black rounded-xl p-2.5 space-y-1.5 text-[11px]">
+              <div className="font-black text-black uppercase flex flex-wrap items-center justify-between gap-2">
+                <span>Checklist Domain Auth Vercel ({VERCEL_PRODUCTION_DOMAIN})</span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyDomain(VERCEL_PRODUCTION_DOMAIN)}
+                  className="px-2 py-0.5 bg-[#FFD000] border border-black rounded font-black text-[10px] flex items-center gap-1"
+                >
+                  {copiedDomain ? <IconCheck className="w-3 h-3" /> : <IconCopy className="w-3 h-3" />}
+                  <span>Salin {VERCEL_PRODUCTION_DOMAIN}</span>
+                </button>
+              </div>
+              <ol className="list-decimal list-inside space-y-0.5 text-slate-700 font-semibold">
+                <li>
+                  Buka <strong>Firebase Console</strong> (Project: <code className="bg-slate-100 px-1 rounded">{FIREBASE_CONSOLE_INFO.projectId}</code>) →{' '}
+                  <strong>Authentication → Settings → Authorized domains → Add domain</strong> → masukkan{' '}
+                  <code className="bg-slate-100 px-1 rounded">{VERCEL_PRODUCTION_DOMAIN}</code>
+                  {currentHost && currentHost !== VERCEL_PRODUCTION_DOMAIN && currentHost !== 'localhost' ? (
+                    <> (dan host aktif: <code className="bg-slate-100 px-1 rounded">{currentHost}</code>)</>
+                  ) : null}.
+                </li>
+                <li>
+                  Untuk <strong>Pop-Up GIS / Redirect OAuth Langsung</strong> di Google Cloud Console → <strong>Credentials → OAuth 2.0 Client</strong>, tambahkan{' '}
+                  <code className="bg-slate-100 px-1 rounded">https://{VERCEL_PRODUCTION_DOMAIN}</code> ke <em>Authorized JavaScript origins</em> dan <em>Authorized redirect URIs</em> (<code className="bg-slate-100 px-1 rounded">https://{VERCEL_PRODUCTION_DOMAIN}/</code>).
+                </li>
+                <li>
+                  Jika layar <em>"Google belum memverifikasi aplikasi ini"</em> muncul: tambahkan email Anda di <strong>OAuth consent screen → Test users</strong>, atau klik <strong>Lanjutan → Buka app → Centang semua izin → Lanjutkan</strong> memakai <strong>Mode Redirect</strong>.
+                </li>
+              </ol>
+            </div>
+          )}
         </div>
 
         {/* LANGKAH 2 & 3: SET SPREADSHEET + SETUP 9 TAB + SYNC */}
@@ -480,6 +614,6 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
           </div>
         </div>
       </div>
-    </section>
+    </PopupModal>
   );
 };

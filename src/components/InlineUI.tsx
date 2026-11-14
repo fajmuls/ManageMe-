@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   IconChevronDown,
   IconChevronUp,
@@ -11,8 +12,92 @@ import {
   IconSearch,
   IconTrash,
 } from './icons/SvgIcons';
+import { X } from 'lucide-react';
 import { KOS_CATEGORIES, normalizeKosCategory } from '../data/kosmanItems';
 import { KosCategory, KosItem } from '../types/kosman';
+
+// ==================== POP COMIC OVERLAY MODAL WRAPPER ====================
+
+interface PopupModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
+  headerBg?: string;
+  maxWidthClass?: string;
+  children: React.ReactNode;
+}
+
+export const PopupModal: React.FC<PopupModalProps> = ({
+  isOpen,
+  onClose,
+  title,
+  subtitle,
+  icon,
+  headerBg = 'bg-[#FFD000]',
+  maxWidthClass = 'max-w-2xl',
+  children,
+}) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isOpen, onClose]);
+
+  if (!isOpen || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[60] bg-black/55 backdrop-blur-[1px] flex items-center justify-center p-2.5 sm:p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className={`w-full ${maxWidthClass} bg-[#FFFDF6] border-2 border-black rounded-2xl shadow-[6px_6px_0px_#000] max-h-[90vh] flex flex-col overflow-hidden`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="bg-white border-b-2 border-black px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            {icon && (
+              <div
+                className={`w-7 h-7 sm:w-8 sm:h-8 ${headerBg} border border-black rounded-lg flex items-center justify-center shrink-0 shadow-[1.5px_1.5px_0px_#000]`}
+              >
+                {icon}
+              </div>
+            )}
+            <div className="min-w-0">
+              <h3 className="font-display font-black text-xs sm:text-sm uppercase text-black leading-tight truncate">
+                {title}
+              </h3>
+              {subtitle && (
+                <p className="text-[10px] font-bold text-slate-600 truncate">{subtitle}</p>
+              )}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Tutup pop-up"
+            className="w-7 h-7 bg-slate-100 hover:bg-[#FF4B82] hover:text-white border border-black rounded-lg flex items-center justify-center text-black shrink-0 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto p-3.5 sm:p-4 space-y-3">{children}</div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+// ==================== POP-UP OVERLAY DROPDOWN ====================
 
 export interface DropdownOption {
   value: string;
@@ -29,11 +114,13 @@ interface InlineDropdownProps {
   searchable?: boolean;
   className?: string;
   accentColor?: string;
+  compact?: boolean;
+  align?: 'left' | 'center' | 'right';
 }
 
 /**
- * Dropdown menyatu langsung ke dalam alur halaman (accordion ke bawah),
- * bukan pop-up native <select> atau overlay melayang.
+ * Dropdown Pop-Up Popover menyatu dengan UI Pop Comic website:
+ * muncul menimpa layer di bawahnya (z-50) tanpa menggeser layout halaman.
  */
 export const InlineDropdown: React.FC<InlineDropdownProps> = ({
   label,
@@ -44,9 +131,91 @@ export const InlineDropdown: React.FC<InlineDropdownProps> = ({
   searchable = false,
   className = '',
   accentColor = 'bg-white',
+  compact = false,
+  align = 'left',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuStyle, setMenuStyle] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    maxListHeight: number;
+  }>({ top: 0, left: 0, width: 200, maxListHeight: 208 });
+
+  const updateMenuPosition = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const minW = compact ? Math.max(rect.width, 195) : rect.width;
+    const width = Math.min(minW, window.innerWidth - 16);
+
+    let left = rect.left;
+    if (align === 'right') {
+      left = rect.right - width;
+    } else if (align === 'center') {
+      left = rect.left + rect.width / 2 - width / 2;
+    }
+    left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+
+    const spaceBelow = window.innerHeight - rect.bottom - 12;
+    const spaceAbove = rect.top - 12;
+
+    if (spaceBelow < 180 && spaceAbove > spaceBelow) {
+      setMenuStyle({
+        bottom: window.innerHeight - rect.top + 4,
+        left,
+        width,
+        maxListHeight: Math.max(120, Math.min(220, spaceAbove - 44)),
+      });
+    } else {
+      setMenuStyle({
+        top: rect.bottom + 4,
+        left,
+        width,
+        maxListHeight: Math.max(120, Math.min(220, spaceBelow - 44)),
+      });
+    }
+  }, [align, compact]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updateMenuPosition();
+
+    const handleOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (
+        triggerRef.current &&
+        !triggerRef.current.contains(target) &&
+        (!menuRef.current || !menuRef.current.contains(target))
+      ) {
+        setIsOpen(false);
+        setSearch('');
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+        setSearch('');
+      }
+    };
+    const handleReposition = () => updateMenuPosition();
+
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside);
+    window.addEventListener('keydown', handleEsc);
+    window.addEventListener('resize', handleReposition);
+    window.addEventListener('scroll', handleReposition, true);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+      window.removeEventListener('keydown', handleEsc);
+      window.removeEventListener('resize', handleReposition);
+      window.removeEventListener('scroll', handleReposition, true);
+    };
+  }, [isOpen, updateMenuPosition]);
 
   const normalized: DropdownOption[] = options.map((opt) =>
     typeof opt === 'string' ? { value: opt, label: opt } : opt
@@ -61,18 +230,25 @@ export const InlineDropdown: React.FC<InlineDropdownProps> = ({
   );
 
   return (
-    <div className={`w-full ${className}`}>
+    <div className={`relative w-full min-w-0 ${className}`}>
       {label && (
-        <span className="block text-[10px] font-black uppercase text-slate-700 mb-1">
+        <span
+          className={`block font-black uppercase text-slate-700 mb-1 truncate ${
+            compact ? 'text-[9px] sm:text-[10px]' : 'text-[10px]'
+          }`}
+        >
           {label}
         </span>
       )}
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`w-full px-2.5 py-2 border-2 border-black rounded-lg text-xs font-bold text-left flex items-center justify-between gap-2 transition-colors ${accentColor} hover:bg-slate-50`}
+        className={`w-full border-2 border-black rounded-lg font-bold text-left flex items-center justify-between gap-1 transition-colors ${accentColor} hover:bg-slate-50 ${
+          compact ? 'px-2 py-1.5 text-[11px]' : 'px-2.5 py-2 text-xs'
+        }`}
       >
-        <span className="truncate text-black">
+        <span className="truncate text-black min-w-0">
           {selectedOption ? selectedOption.label : placeholder}
         </span>
         {isOpen ? (
@@ -82,61 +258,77 @@ export const InlineDropdown: React.FC<InlineDropdownProps> = ({
         )}
       </button>
 
-      {/* Accordion In-Flow Options List (Mengalir ke bawah, menyatu dengan website) */}
-      {isOpen && (
-        <div className="mt-1 border-2 border-black rounded-lg bg-[#FFFDF6] overflow-hidden shadow-[2px_2px_0px_#000]">
-          {(searchable || normalized.length > 7) && (
-            <div className="p-1.5 border-b border-black bg-white relative">
-              <IconSearch className="w-3 h-3 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Cari pilihan..."
-                className="w-full pl-6 pr-2 py-1 text-[11px] font-bold border border-black rounded bg-[#FFFDF6] focus:outline-none"
-              />
-            </div>
-          )}
-
-          <div className="max-h-48 overflow-y-auto divide-y divide-slate-200">
-            {filtered.length === 0 ? (
-              <div className="p-2 text-[11px] font-bold text-slate-500 text-center">
-                Tidak ada pilihan cocok
+      {/* Pop-Up Popover Options List via Portal (Menimpa semua layer di bawahnya tanpa terpotong) */}
+      {isOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            ref={menuRef}
+            style={{
+              position: 'fixed',
+              top: menuStyle.top,
+              bottom: menuStyle.bottom,
+              left: menuStyle.left,
+              width: menuStyle.width,
+            }}
+            className="z-[90] border-2 border-black rounded-xl bg-[#FFFDF6] overflow-hidden shadow-[4px_4px_0px_#000]"
+          >
+            {(searchable || normalized.length > 7) && (
+              <div className="p-1.5 border-b border-black bg-white relative">
+                <IconSearch className="w-3 h-3 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Cari pilihan..."
+                  className="w-full pl-6 pr-2 py-1 text-[11px] font-bold border border-black rounded bg-[#FFFDF6] focus:outline-none"
+                />
               </div>
-            ) : (
-              filtered.map((opt) => {
-                const active = opt.value === value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => {
-                      onChange(opt.value);
-                      setIsOpen(false);
-                      setSearch('');
-                    }}
-                    className={`w-full px-2.5 py-2 text-left text-xs font-bold flex items-center justify-between gap-2 transition-colors ${
-                      active
-                        ? 'bg-[#FFD000] text-black font-black'
-                        : 'bg-white hover:bg-[#FFFDF6] text-slate-800'
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <span className="block truncate">{opt.label}</span>
-                      {opt.sublabel && (
-                        <span className="block text-[10px] font-medium text-slate-500 truncate">
-                          {opt.sublabel}
-                        </span>
-                      )}
-                    </div>
-                    {active && <IconCheck className="w-3.5 h-3.5 text-black shrink-0" />}
-                  </button>
-                );
-              })
             )}
-          </div>
-        </div>
-      )}
+
+            <div
+              style={{ maxHeight: menuStyle.maxListHeight }}
+              className="overflow-y-auto divide-y divide-slate-200"
+            >
+              {filtered.length === 0 ? (
+                <div className="p-2.5 text-[11px] font-bold text-slate-500 text-center">
+                  Tidak ada pilihan cocok
+                </div>
+              ) : (
+                filtered.map((opt) => {
+                  const active = opt.value === value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        onChange(opt.value);
+                        setIsOpen(false);
+                        setSearch('');
+                      }}
+                      className={`w-full px-2.5 py-2 text-left text-xs font-bold flex items-center justify-between gap-2 transition-colors ${
+                        active
+                          ? 'bg-[#FFD000] text-black font-black'
+                          : 'bg-white hover:bg-[#FFFDF6] text-slate-800'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <span className="block truncate">{opt.label}</span>
+                        {opt.sublabel && (
+                          <span className="block text-[10px] font-medium text-slate-500 truncate">
+                            {opt.sublabel}
+                          </span>
+                        )}
+                      </div>
+                      {active && <IconCheck className="w-3.5 h-3.5 text-black shrink-0" />}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 };
@@ -152,7 +344,7 @@ interface InlineConfirmBarProps {
 }
 
 /**
- * Pengganti window.confirm & pop-up dialog hapus: menyatu di dalam halaman.
+ * Konfirmasi Pop-up Modal bergaya Pop Comic (pengganti window.confirm).
  */
 export const InlineConfirmBar: React.FC<InlineConfirmBarProps> = ({
   title,
@@ -162,82 +354,129 @@ export const InlineConfirmBar: React.FC<InlineConfirmBarProps> = ({
   danger = true,
   onConfirm,
   onCancel,
-}) => (
-  <div
-    className={`border-2 border-black rounded-xl p-2.5 sm:p-3 space-y-2 shadow-[3px_3px_0px_#000] ${
-      danger ? 'bg-[#FFD000]' : 'bg-[#00E5FF]'
-    }`}
-  >
-    <div className="flex items-start gap-2">
-      <IconAlert className="w-4 h-4 text-black shrink-0 mt-0.5" />
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-black text-black leading-snug">{title}</p>
-        {description && (
-          <p className="text-[11px] font-bold text-slate-900 mt-0.5 leading-snug">
-            {description}
-          </p>
-        )}
-      </div>
-    </div>
-    <div className="flex items-center justify-end gap-1.5">
-      <button
-        type="button"
-        onClick={onCancel}
-        className="px-2.5 py-1 bg-white border border-black rounded-lg text-[11px] font-bold text-black hover:bg-slate-100"
-      >
-        {cancelLabel}
-      </button>
-      <button
-        type="button"
-        onClick={onConfirm}
-        className={`px-3 py-1 border border-black rounded-lg text-[11px] font-black uppercase ${
-          danger ? 'bg-[#FF4B82] text-white' : 'bg-black text-white'
+}) => {
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [onCancel]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[75] bg-black/55 backdrop-blur-[1px] flex items-center justify-center p-3"
+      onClick={onCancel}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={`w-full max-w-md border-2 border-black rounded-2xl p-4 space-y-3 shadow-[6px_6px_0px_#000] ${
+          danger ? 'bg-[#FFD000]' : 'bg-[#00E5FF]'
         }`}
       >
-        {confirmLabel}
-      </button>
-    </div>
-  </div>
-);
+        <div className="flex items-start gap-2.5">
+          <div className="w-8 h-8 bg-white border-2 border-black rounded-lg flex items-center justify-center shrink-0">
+            <IconAlert className="w-4 h-4 text-black" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs sm:text-sm font-black text-black leading-snug">{title}</p>
+            {description && (
+              <p className="text-[11px] font-bold text-slate-900 mt-1 leading-snug">
+                {description}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-3 py-1.5 bg-white border-2 border-black rounded-lg text-xs font-black text-black hover:bg-slate-100"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className={`px-3.5 py-1.5 border-2 border-black rounded-lg text-xs font-black uppercase shadow-[2px_2px_0px_#000] ${
+              danger ? 'bg-[#FF4B82] text-white' : 'bg-black text-white'
+            }`}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
 
 interface InlineNoticeProps {
   type: 'success' | 'error' | 'info';
   message: string;
   onClose?: () => void;
+  inline?: boolean;
 }
 
 /**
- * Pengganti window.alert & floating toast pop-up: menyatu di aliran konten.
+ * Notifikasi Pop-up Toast bergaya Pop Comic yang melayang menimpa UI tanpa menggeser layout dasar.
  */
-export const InlineNotice: React.FC<InlineNoticeProps> = ({ type, message, onClose }) => (
-  <div
-    className={`border-2 border-black rounded-xl p-2.5 text-xs font-bold flex items-center justify-between gap-2 shadow-[2px_2px_0px_#000] ${
-      type === 'success'
-        ? 'bg-[#A3E635] text-black'
-        : type === 'error'
-        ? 'bg-[#FF4B82] text-white'
-        : 'bg-[#00E5FF] text-black'
-    }`}
-  >
-    <div className="flex items-center gap-2 min-w-0">
-      {type === 'success' ? (
-        <IconCheckCircle className="w-4 h-4 shrink-0" />
-      ) : (
-        <IconAlert className="w-4 h-4 shrink-0" />
+export const InlineNotice: React.FC<InlineNoticeProps> = ({
+  type,
+  message,
+  onClose,
+  inline = false,
+}) => {
+  useEffect(() => {
+    if (inline || !onClose) return;
+    const timeout = setTimeout(() => onClose(), type === 'error' ? 7000 : 4500);
+    return () => clearTimeout(timeout);
+  }, [inline, onClose, type, message]);
+
+  const cardClass = `border-2 border-black rounded-xl p-3 text-xs font-bold flex items-center justify-between gap-2.5 shadow-[4px_4px_0px_#000] ${
+    type === 'success'
+      ? 'bg-[#A3E635] text-black'
+      : type === 'error'
+      ? 'bg-[#FF4B82] text-white'
+      : 'bg-[#00E5FF] text-black'
+  }`;
+
+  const content = (
+    <div className={cardClass} role="status">
+      <div className="flex items-center gap-2 min-w-0">
+        {type === 'success' ? (
+          <IconCheckCircle className="w-4 h-4 shrink-0" />
+        ) : (
+          <IconAlert className="w-4 h-4 shrink-0" />
+        )}
+        <span className="leading-snug">{message}</span>
+      </div>
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-2 py-0.5 text-[11px] font-black border border-black rounded-lg bg-white text-black shrink-0"
+        >
+          Tutup
+        </button>
       )}
-      <span className="leading-snug">{message}</span>
     </div>
-    {onClose && (
-      <button
-        type="button"
-        onClick={onClose}
-        className="px-1.5 py-0.5 text-xs font-black border border-black rounded bg-white text-black shrink-0"
-      >
-        Tutup
-      </button>
-    )}
-  </div>
-);
+  );
+
+  if (inline) return content;
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed bottom-4 right-3 left-3 sm:left-auto sm:w-full sm:max-w-md z-[85]">
+      {content}
+    </div>,
+    document.body
+  );
+};
 
 // ==================== UNIFIED AI SCANNER (SCAN NOTA & SCAN STOK) ====================
 
@@ -391,31 +630,16 @@ export const InlineScannerPanel: React.FC<InlineScannerPanelProps> = ({
   };
 
   return (
-    <div className="bg-white border-2 border-black rounded-xl p-3 space-y-2.5 shadow-[3px_3px_0px_#000]">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black pb-2">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-[#00E5FF] border border-black rounded-lg flex items-center justify-center">
-            <IconSparkles className="w-4 h-4 text-black" />
-          </div>
-          <div>
-            <h4 className="font-display font-black text-xs sm:text-sm uppercase text-black leading-none">
-              AI Scanner Terintegrasi (Nota & Cek Stok)
-            </h4>
-            <p className="text-[10px] font-bold text-slate-600">
-              Otomatis perbarui Keuangan, Stok KosMan, Riwayat, & Google Spreadsheet
-            </p>
-          </div>
-        </div>
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-2 py-0.5 bg-slate-100 border border-black rounded text-[11px] font-black text-black"
-          >
-            Tutup
-          </button>
-        )}
-      </div>
+    <PopupModal
+      isOpen={true}
+      onClose={onClose || (() => {})}
+      title="AI Scanner Terintegrasi (Nota & Cek Stok)"
+      subtitle="Otomatis perbarui Keuangan, Stok KosMan, Riwayat, & Google Spreadsheet"
+      icon={<IconSparkles className="w-4 h-4 text-black" />}
+      headerBg="bg-[#00E5FF]"
+      maxWidthClass="max-w-2xl"
+    >
+      <div className="space-y-2.5 pb-4">
 
       {/* Mode Switcher */}
       <div className="grid grid-cols-2 gap-1.5 bg-[#FFFDF6] border border-black p-1 rounded-lg">
@@ -477,9 +701,11 @@ export const InlineScannerPanel: React.FC<InlineScannerPanelProps> = ({
         />
       </label>
 
-      {errorMsg && <InlineNotice type="error" message={errorMsg} onClose={() => setErrorMsg(null)} />}
+      {errorMsg && (
+        <InlineNotice inline type="error" message={errorMsg} onClose={() => setErrorMsg(null)} />
+      )}
       {successMsg && (
-        <InlineNotice type="success" message={successMsg} onClose={() => setSuccessMsg(null)} />
+        <InlineNotice inline type="success" message={successMsg} onClose={() => setSuccessMsg(null)} />
       )}
 
       {/* Nota Result Preview */}
@@ -712,6 +938,7 @@ export const InlineScannerPanel: React.FC<InlineScannerPanelProps> = ({
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </PopupModal>
   );
 };

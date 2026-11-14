@@ -8,7 +8,7 @@ import {
   IconUser,
   IconSearch,
 } from './icons/SvgIcons';
-import { InlineDropdown, InlineConfirmBar } from './InlineUI';
+import { InlineDropdown, InlineConfirmBar, PopupModal } from './InlineUI';
 
 interface NotesViewProps {
   normalNotes: NormalNote[];
@@ -189,8 +189,16 @@ export const NotesView: React.FC<NotesViewProps> = ({
         />
       )}
 
-      {/* INLINE FORM: Normal Note */}
-      {activeTab === 'normal' && showNormalForm && (
+      {/* POP-UP FORM: Normal Note */}
+      <PopupModal
+        isOpen={activeTab === 'normal' && showNormalForm}
+        onClose={() => setShowNormalForm(false)}
+        title="Tambah Catatan Baru"
+        subtitle="Tulis catatan harian atau pengingat (tersinkron ke Spreadsheet)"
+        icon={<IconNote className="w-4 h-4 text-black" />}
+        headerBg="bg-purple-300"
+        maxWidthClass="max-w-xl"
+      >
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -200,15 +208,8 @@ export const NotesView: React.FC<NotesViewProps> = ({
             setNormalTitle('');
             setNormalContent('');
           }}
-          className="bg-[#FFFDF6] border-2 border-black rounded-xl p-3.5 shadow-[3px_3px_0px_#000] space-y-2.5"
+          className="space-y-2.5 pb-12"
         >
-          <div className="flex items-center justify-between border-b border-black pb-1.5">
-            <h3 className="font-display font-black text-xs uppercase text-black">Tambah Catatan Baru</h3>
-            <button type="button" onClick={() => setShowNormalForm(false)} className="text-xs font-black">
-              Tutup
-            </button>
-          </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-start">
             <div className="sm:col-span-2">
               <label className="block text-[10px] font-black text-slate-700 uppercase mb-1">Judul *</label>
@@ -218,7 +219,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 value={normalTitle}
                 onChange={(e) => setNormalTitle(e.target.value)}
                 placeholder="Judul catatan"
-                className="w-full px-2.5 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
+                className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
               />
             </div>
             <InlineDropdown
@@ -233,34 +234,42 @@ export const NotesView: React.FC<NotesViewProps> = ({
             <label className="block text-[10px] font-black text-slate-700 uppercase mb-1">Isi Catatan *</label>
             <textarea
               required
-              rows={3}
+              rows={4}
               value={normalContent}
               onChange={(e) => setNormalContent(e.target.value)}
               placeholder="Tulis catatan harian, pengingat, atau tugas di sini..."
-              className="w-full px-2.5 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
+              className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
             />
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pt-1">
             <button
               type="button"
               onClick={() => setShowNormalForm(false)}
-              className="px-3 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
+              className="px-3 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
             >
               Batal
             </button>
             <button
               type="submit"
-              className="comic-button bg-purple-300 text-black px-4 py-1.5 border border-black rounded-lg font-black text-xs uppercase"
+              className="comic-button bg-purple-300 text-black px-4 py-1.5 border-2 border-black rounded-lg font-black text-xs uppercase shadow-[2px_2px_0px_#000]"
             >
               Simpan Catatan
             </button>
           </div>
         </form>
-      )}
+      </PopupModal>
 
-      {/* INLINE FORM: IG Note */}
-      {activeTab === 'ig' && showIGForm && (
+      {/* POP-UP FORM: IG Note */}
+      <PopupModal
+        isOpen={activeTab === 'ig' && showIGForm}
+        onClose={() => setShowIGForm(false)}
+        title="Tambah IG Music Note"
+        subtitle="Simpan judul lagu beserta lirik atau kutipan favorit"
+        icon={<IconMusic className="w-4 h-4 text-black" />}
+        headerBg="bg-[#FFD000]"
+        maxWidthClass="max-w-lg"
+      >
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -270,62 +279,62 @@ export const NotesView: React.FC<NotesViewProps> = ({
             setIgSong('');
             setIgContent('');
           }}
-          className="bg-[#FFFDF6] border-2 border-black rounded-xl p-3.5 shadow-[3px_3px_0px_#000] space-y-2.5"
+          className="space-y-3"
         >
-          <div className="flex items-center justify-between border-b border-black pb-1.5">
-            <h3 className="font-display font-black text-xs uppercase text-black">Tambah IG Music Note</h3>
-            <button type="button" onClick={() => setShowIGForm(false)} className="text-xs font-black">
-              Tutup
-            </button>
+          <div>
+            <label className="block text-[10px] font-black text-slate-700 uppercase mb-1">
+              Judul Lagu / Musisi *
+            </label>
+            <input
+              type="text"
+              required
+              value={igSong}
+              onChange={(e) => setIgSong(e.target.value)}
+              placeholder="Contoh: Mendarah, About You"
+              className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
+            />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[10px] font-black text-slate-700 uppercase mb-1">
-                Judul Lagu / Musisi *
-              </label>
-              <input
-                type="text"
-                required
-                value={igSong}
-                onChange={(e) => setIgSong(e.target.value)}
-                placeholder="Contoh: Mendarah, About You"
-                className="w-full px-2.5 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-700 uppercase mb-1">
-                Kutipan / Lirik Pendek *
-              </label>
-              <input
-                type="text"
-                required
-                value={igContent}
-                onChange={(e) => setIgContent(e.target.value)}
-                placeholder="Tulis lirik atau kata favorit..."
-                className="w-full px-2.5 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
-              />
-            </div>
+          <div>
+            <label className="block text-[10px] font-black text-slate-700 uppercase mb-1">
+              Kutipan / Lirik Pendek *
+            </label>
+            <input
+              type="text"
+              required
+              value={igContent}
+              onChange={(e) => setIgContent(e.target.value)}
+              placeholder="Tulis lirik atau kata favorit..."
+              className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
+            />
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pt-1">
             <button
               type="button"
               onClick={() => setShowIGForm(false)}
-              className="px-3 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
+              className="px-3 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
             >
               Batal
             </button>
             <button
               type="submit"
-              className="comic-button bg-black text-[#FFD000] px-4 py-1.5 border border-black rounded-lg font-black text-xs uppercase"
+              className="comic-button bg-black text-[#FFD000] px-4 py-1.5 border-2 border-black rounded-lg font-black text-xs uppercase shadow-[2px_2px_0px_#000]"
             >
               Simpan IG Note
             </button>
           </div>
         </form>
-      )}
+      </PopupModal>
 
-      {/* INLINE FORM: Personal Vault Note */}
-      {activeTab === 'personal' && showPersonalForm && (
+      {/* POP-UP FORM: Personal Vault Note */}
+      <PopupModal
+        isOpen={activeTab === 'personal' && showPersonalForm}
+        onClose={() => setShowPersonalForm(false)}
+        title="Tambah Data Pribadi"
+        subtitle="Simpan info kosan, WiFi, rekening, atau field kunci-nilai lainnya"
+        icon={<IconUser className="w-4 h-4 text-black" />}
+        headerBg="bg-[#00E5FF]"
+        maxWidthClass="max-w-xl"
+      >
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -337,15 +346,8 @@ export const NotesView: React.FC<NotesViewProps> = ({
             setPersonNotes('');
             setCustomFields([{ key: '', value: '' }]);
           }}
-          className="bg-[#FFFDF6] border-2 border-black rounded-xl p-3.5 shadow-[3px_3px_0px_#000] space-y-2.5"
+          className="space-y-3"
         >
-          <div className="flex items-center justify-between border-b border-black pb-1.5">
-            <h3 className="font-display font-black text-xs uppercase text-black">Tambah Data Pribadi</h3>
-            <button type="button" onClick={() => setShowPersonalForm(false)} className="text-xs font-black">
-              Tutup
-            </button>
-          </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
               <label className="block text-[10px] font-black text-slate-700 uppercase mb-1">
@@ -357,7 +359,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 value={personName}
                 onChange={(e) => setPersonName(e.target.value)}
                 placeholder="Misal: Data Kosan, Akun WiFi, Rekening"
-                className="w-full px-2.5 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
+                className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
               />
             </div>
             <div>
@@ -367,7 +369,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 value={personNotes}
                 onChange={(e) => setPersonNotes(e.target.value)}
                 placeholder="Catatan pelengkap..."
-                className="w-full px-2.5 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
+                className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
               />
             </div>
           </div>
@@ -385,7 +387,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     setCustomFields(updated);
                   }}
                   placeholder="Nama Kunci (No. HP)"
-                  className="w-1/2 px-2.5 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
+                  className="w-1/2 px-2.5 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
                 />
                 <input
                   type="text"
@@ -396,7 +398,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     setCustomFields(updated);
                   }}
                   placeholder="Nilai (0812...)"
-                  className="w-1/2 px-2.5 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
+                  className="w-1/2 px-2.5 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
                 />
               </div>
             ))}
@@ -409,23 +411,23 @@ export const NotesView: React.FC<NotesViewProps> = ({
             </button>
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pt-1">
             <button
               type="button"
               onClick={() => setShowPersonalForm(false)}
-              className="px-3 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
+              className="px-3 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
             >
               Batal
             </button>
             <button
               type="submit"
-              className="comic-button bg-[#00E5FF] text-black px-4 py-1.5 border border-black rounded-lg font-black text-xs uppercase"
+              className="comic-button bg-[#00E5FF] text-black px-4 py-1.5 border-2 border-black rounded-lg font-black text-xs uppercase shadow-[2px_2px_0px_#000]"
             >
               Simpan Data
             </button>
           </div>
         </form>
-      )}
+      </PopupModal>
 
       {/* Normal Notes Grid */}
       {activeTab === 'normal' && (

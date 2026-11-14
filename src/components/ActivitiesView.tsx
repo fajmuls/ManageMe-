@@ -13,7 +13,7 @@ import {
   IconDumbbell,
   IconCalendar,
 } from './icons/SvgIcons';
-import { InlineDropdown, InlineConfirmBar } from './InlineUI';
+import { InlineDropdown, InlineConfirmBar, PopupModal } from './InlineUI';
 import { Play, Square, Navigation, Car, Bike, Target } from 'lucide-react';
 
 interface ActivitiesViewProps {
@@ -400,23 +400,18 @@ export function ActivitiesView({
             </div>
           </div>
 
-          {/* Inline Start Trip Form (No Pop-up) */}
-          {showStartTripForm && !activeTrip && (
-            <form
-              onSubmit={handleStartTrip}
-              className="bg-[#FFFDF6] border-2 border-black rounded-xl p-3.5 shadow-[3px_3px_0px_#000] space-y-3"
-            >
-              <div className="flex items-center justify-between border-b border-black pb-1.5">
-                <h4 className="font-black text-xs uppercase text-black">Form Mulai Perjalanan Baru</h4>
-                <button
-                  type="button"
-                  onClick={() => setShowStartTripForm(false)}
-                  className="text-xs font-black text-slate-600"
-                >
-                  Tutup
-                </button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {/* Pop-Up Start Trip Form */}
+          <PopupModal
+            isOpen={showStartTripForm && !activeTrip}
+            onClose={() => setShowStartTripForm(false)}
+            title="Form Mulai Perjalanan Baru"
+            subtitle="Mulai stopwatch trip untuk mencatat rute & biaya perjalanan"
+            icon={<Navigation className="w-4 h-4 text-black" />}
+            headerBg="bg-[#00E5FF]"
+            maxWidthClass="max-w-xl"
+          >
+            <form onSubmit={handleStartTrip} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-[10px] font-black text-slate-700 uppercase mb-1">
                     Lokasi Asal
@@ -426,7 +421,7 @@ export function ActivitiesView({
                     value={startOrigin}
                     onChange={(e) => setStartOrigin(e.target.value)}
                     placeholder="Kosan, Rumah, Kantor..."
-                    className="w-full px-2.5 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
+                    className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
                   />
                 </div>
                 <div>
@@ -439,31 +434,35 @@ export function ActivitiesView({
                     value={startDest}
                     onChange={(e) => setStartDest(e.target.value)}
                     placeholder="Kampus, Pasar, Stasiun..."
-                    className="w-full px-2.5 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-700 uppercase mb-1">
-                    Catatan Rute
-                  </label>
-                  <input
-                    type="text"
-                    value={startNotes}
-                    onChange={(e) => setStartNotes(e.target.value)}
-                    placeholder="Opsional..."
-                    className="w-full px-2.5 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
+                    className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
                   />
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <label className="block text-[10px] font-black text-slate-700 uppercase mb-1">
+                  Catatan Rute
+                </label>
+                <input
+                  type="text"
+                  value={startNotes}
+                  onChange={(e) => setStartNotes(e.target.value)}
+                  placeholder="Opsional..."
+                  className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <span className="block text-[10px] font-black text-slate-700 uppercase">
+                  Kendaraan
+                </span>
                 <div className="flex flex-wrap gap-1.5">
                   {['Motor', 'Mobil', 'KRL / Bus', 'Jalan'].map((v) => (
                     <button
                       key={v}
                       type="button"
                       onClick={() => setStartVehicle(v)}
-                      className={`px-2.5 py-1 border border-black rounded-lg text-xs font-bold ${
+                      className={`px-2.5 py-1 border-2 border-black rounded-lg text-xs font-bold ${
                         startVehicle === v ? 'bg-[#FFD000]' : 'bg-white'
                       }`}
                     >
@@ -471,34 +470,41 @@ export function ActivitiesView({
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowStartTripForm(false)}
+                  className="px-3 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
+                >
+                  Batal
+                </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-[#00E5FF] text-black border border-black rounded-lg font-black text-xs uppercase shadow-[2px_2px_0px_#000]"
+                  className="px-4 py-1.5 bg-[#00E5FF] text-black border-2 border-black rounded-lg font-black text-xs uppercase shadow-[2px_2px_0px_#000]"
                 >
                   Mulai Stopwatch Trip
                 </button>
               </div>
             </form>
-          )}
+          </PopupModal>
 
-          {/* Inline End Trip Form (No Pop-up) */}
-          {showEndTripForm && activeTrip && (
-            <form
-              onSubmit={handleFinishTrip}
-              className="bg-[#FFFDF6] border-2 border-black rounded-xl p-3.5 shadow-[3px_3px_0px_#000] space-y-3"
-            >
-              <div className="flex items-center justify-between border-b border-black pb-1.5">
-                <h4 className="font-black text-xs uppercase text-black">
-                  Selesaikan Perjalanan: {activeTrip.origin} {'->'} {activeTrip.destination}
-                </h4>
-                <button
-                  type="button"
-                  onClick={() => setShowEndTripForm(false)}
-                  className="text-xs font-black text-slate-600"
-                >
-                  Tutup
-                </button>
-              </div>
+          {/* Pop-Up End Trip Form */}
+          <PopupModal
+            isOpen={showEndTripForm && !!activeTrip}
+            onClose={() => setShowEndTripForm(false)}
+            title={
+              activeTrip
+                ? `Selesaikan Trip: ${activeTrip.origin} -> ${activeTrip.destination}`
+                : 'Selesaikan Perjalanan'
+            }
+            subtitle="Catat biaya BBM/Tol dan sinkronkan ke Keuangan"
+            icon={<Square className="w-4 h-4 text-black" />}
+            headerBg="bg-[#FF4B82]"
+            maxWidthClass="max-w-xl"
+          >
+            <form onSubmit={handleFinishTrip} className="space-y-3 pb-12">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-start">
                 <div>
                   <label className="block text-[10px] font-black text-slate-700 uppercase mb-1">
@@ -510,7 +516,7 @@ export function ActivitiesView({
                     value={endFuelCost}
                     onChange={(e) => setEndFuelCost(e.target.value)}
                     placeholder="25000"
-                    className="w-full px-2.5 py-1.5 border border-black rounded-lg font-mono text-xs font-bold bg-white"
+                    className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-mono text-xs font-bold bg-white"
                   />
                 </div>
                 <div>
@@ -523,7 +529,7 @@ export function ActivitiesView({
                     value={endTollCost}
                     onChange={(e) => setEndTollCost(e.target.value)}
                     placeholder="0"
-                    className="w-full px-2.5 py-1.5 border border-black rounded-lg font-mono text-xs font-bold bg-white"
+                    className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-mono text-xs font-bold bg-white"
                   />
                 </div>
                 <InlineDropdown
@@ -538,7 +544,7 @@ export function ActivitiesView({
                 />
               </div>
 
-              <div className="p-2.5 bg-[#FFD000]/30 border border-black rounded-lg flex items-center gap-2">
+              <div className="p-2.5 bg-[#FFD000]/30 border-2 border-black rounded-lg flex items-center gap-2">
                 <input
                   type="checkbox"
                   id="syncFinCheck"
@@ -555,19 +561,19 @@ export function ActivitiesView({
                 <button
                   type="button"
                   onClick={() => setShowEndTripForm(false)}
-                  className="px-3 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
+                  className="px-3 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-[#A3E635] text-black border border-black rounded-lg font-black text-xs uppercase shadow-[2px_2px_0px_#000]"
+                  className="px-4 py-1.5 bg-[#A3E635] text-black border-2 border-black rounded-lg font-black text-xs uppercase shadow-[2px_2px_0px_#000]"
                 >
                   Simpan & Selesai
                 </button>
               </div>
             </form>
-          )}
+          </PopupModal>
 
           {/* Trips History Grid */}
           {trips.length === 0 ? (
@@ -827,8 +833,16 @@ export function ActivitiesView({
             </button>
           </div>
 
-          {/* Inline Workout Form (No Pop-up) */}
-          {showWorkoutForm && (
+          {/* Pop-Up Workout Form */}
+          <PopupModal
+            isOpen={showWorkoutForm}
+            onClose={() => setShowWorkoutForm(false)}
+            title="Catat Sesi Workout Baru"
+            subtitle="Rekam latihan fisik & durasi menit harian"
+            icon={<IconDumbbell className="w-4 h-4 text-black" />}
+            headerBg="bg-[#FF4B82]"
+            maxWidthClass="max-w-xl"
+          >
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -843,9 +857,9 @@ export function ActivitiesView({
                 setWorkoutTitle('');
                 setWorkoutRoutine('');
               }}
-              className="bg-[#FFFDF6] border-2 border-black rounded-xl p-3.5 shadow-[3px_3px_0px_#000] space-y-2.5"
+              className="space-y-3"
             >
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-[10px] font-black text-slate-700 uppercase mb-1">
                     Judul Latihan *
@@ -856,19 +870,7 @@ export function ActivitiesView({
                     value={workoutTitle}
                     onChange={(e) => setWorkoutTitle(e.target.value)}
                     placeholder="Push-up & Core, Jogging..."
-                    className="w-full px-2.5 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-700 uppercase mb-1">
-                    Detail Gerakan
-                  </label>
-                  <input
-                    type="text"
-                    value={workoutRoutine}
-                    onChange={(e) => setWorkoutRoutine(e.target.value)}
-                    placeholder="Push-up 3x15, Plank 2 menit..."
-                    className="w-full px-2.5 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
+                    className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
                   />
                 </div>
                 <div>
@@ -880,27 +882,39 @@ export function ActivitiesView({
                     min="1"
                     value={workoutMins}
                     onChange={(e) => setWorkoutMins(e.target.value)}
-                    className="w-full px-2.5 py-1.5 border border-black rounded-lg font-mono text-xs font-bold bg-white"
+                    className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-mono text-xs font-bold bg-white"
                   />
                 </div>
               </div>
-              <div className="flex justify-end gap-2">
+              <div>
+                <label className="block text-[10px] font-black text-slate-700 uppercase mb-1">
+                  Detail Gerakan
+                </label>
+                <input
+                  type="text"
+                  value={workoutRoutine}
+                  onChange={(e) => setWorkoutRoutine(e.target.value)}
+                  placeholder="Push-up 3x15, Plank 2 menit..."
+                  className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setShowWorkoutForm(false)}
-                  className="px-3 py-1.5 border border-black rounded-lg font-bold text-xs bg-white"
+                  className="px-3 py-1.5 border-2 border-black rounded-lg font-bold text-xs bg-white"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-[#FF4B82] text-white border border-black rounded-lg font-black text-xs uppercase shadow-[2px_2px_0px_#000]"
+                  className="px-4 py-1.5 bg-[#FF4B82] text-white border-2 border-black rounded-lg font-black text-xs uppercase shadow-[2px_2px_0px_#000]"
                 >
                   Simpan Latihan
                 </button>
               </div>
             </form>
-          )}
+          </PopupModal>
 
           {workouts.length === 0 ? (
             <div className="bg-white border-2 border-dashed border-slate-300 rounded-xl p-6 text-center space-y-2">

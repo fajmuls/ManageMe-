@@ -29,6 +29,7 @@ import {
   InlineConfirmBar,
   InlineNotice,
   InlineScannerPanel,
+  PopupModal,
   OcrExtractedItem,
   ScannedStockItem,
 } from './InlineUI';
@@ -539,9 +540,11 @@ export const KosManView: React.FC<KosManViewProps> = ({
               </button>
             </div>
 
-            {/* Inline Accordion Dropdowns (Mengalir ke bawah, bukan pop-up <select>) */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {/* Pop-Up Filter & Sort Dropdowns (Berjajar 3 ke kanan, menimpa layer di bawahnya) */}
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
               <InlineDropdown
+                compact
+                align="left"
                 label="Filter Kategori"
                 value={selectedCategory}
                 options={['Semua', ...KOS_CATEGORIES.map((c) => c.name)]}
@@ -552,6 +555,8 @@ export const KosManView: React.FC<KosManViewProps> = ({
               />
 
               <InlineDropdown
+                compact
+                align="center"
                 label="Filter Sub-Kategori"
                 value={selectedSubCategory}
                 options={['Semua', ...availableSubCategories]}
@@ -559,6 +564,8 @@ export const KosManView: React.FC<KosManViewProps> = ({
               />
 
               <InlineDropdown
+                compact
+                align="right"
                 label="Urutkan Tabel"
                 value={sortBy}
                 options={[
@@ -573,27 +580,20 @@ export const KosManView: React.FC<KosManViewProps> = ({
             </div>
           </div>
 
-          {/* Inline Add / Edit Barang Form (Menyatu ke bawah, bukan pop-up) */}
-          {showAddForm && (
-            <form
-              onSubmit={handleSubmitForm}
-              className="bg-[#FFFDF6] border-2 border-black p-3.5 rounded-xl shadow-[3px_3px_0px_#000] space-y-3"
-            >
-              <div className="flex items-center justify-between border-b border-black pb-1.5">
-                <h3 className="font-display font-black text-sm uppercase text-black">
-                  {editingItem ? `Edit Barang: ${editingItem.name}` : 'Tambah Barang KosMan Baru'}
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddForm(false);
-                    setEditingItem(null);
-                  }}
-                  className="text-xs font-black px-2 py-0.5 border border-black rounded bg-white"
-                >
-                  Batal
-                </button>
-              </div>
+          {/* Pop-Up Add / Edit Barang Form */}
+          <PopupModal
+            isOpen={showAddForm}
+            onClose={() => {
+              setShowAddForm(false);
+              setEditingItem(null);
+            }}
+            title={editingItem ? `Edit Barang: ${editingItem.name}` : 'Tambah Barang KosMan Baru'}
+            subtitle="Pilih kategori, sub-kategori, multi-tag, dan stok barang"
+            icon={editingItem ? <IconEdit className="w-4 h-4 text-black" /> : <IconPlus className="w-4 h-4 text-black" />}
+            headerBg={editingItem ? 'bg-[#FFD000]' : 'bg-[#FF4B82]'}
+            maxWidthClass="max-w-2xl"
+          >
+            <form onSubmit={handleSubmitForm} className="space-y-3 pb-12">
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                 <div className="sm:col-span-2">
@@ -720,16 +720,26 @@ export const KosManView: React.FC<KosManViewProps> = ({
                 )}
               </div>
 
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddForm(false);
+                    setEditingItem(null);
+                  }}
+                  className="px-3 py-1.5 bg-white border-2 border-black rounded-lg text-xs font-bold text-black"
+                >
+                  Batal
+                </button>
                 <button
                   type="submit"
-                  className="comic-button bg-[#A3E635] text-black px-4 py-1.5 rounded-lg border border-black font-black text-xs uppercase"
+                  className="comic-button bg-[#A3E635] text-black px-4 py-1.5 rounded-lg border-2 border-black font-black text-xs uppercase shadow-[2px_2px_0px_#000]"
                 >
                   {editingItem ? 'Simpan Perubahan' : 'Simpan Barang ke Tabel'}
                 </button>
               </div>
             </form>
-          )}
+          </PopupModal>
 
           {/* MAIN TABLE UI */}
           {items.length === 0 ? (
@@ -1115,14 +1125,18 @@ export const KosManView: React.FC<KosManViewProps> = ({
             </div>
 
             {/* Filters + Auto Finance Checkbox */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2 pt-1">
               <InlineDropdown
+                compact
+                align="left"
                 label="Filter Kategori Belanja"
                 value={wishlistCatFilter}
                 options={['Semua', ...KOS_CATEGORIES.map((c) => c.name)]}
                 onChange={(val) => setWishlistCatFilter(val as KosCategory | 'Semua')}
               />
               <InlineDropdown
+                compact
+                align="right"
                 label="Status Beli"
                 value={wishlistStatusFilter}
                 options={[
@@ -1132,7 +1146,7 @@ export const KosManView: React.FC<KosManViewProps> = ({
                 ]}
                 onChange={(val) => setWishlistStatusFilter(val as 'pending' | 'done' | 'all')}
               />
-              <label className="flex items-center gap-2 border-2 border-black rounded-lg px-2.5 py-2 bg-[#FFFDF6] text-[11px] font-bold cursor-pointer self-end">
+              <label className="col-span-2 sm:col-span-1 flex items-center gap-2 border-2 border-black rounded-lg px-2.5 py-1.5 bg-[#FFFDF6] text-[11px] font-bold cursor-pointer self-end">
                 <input
                   type="checkbox"
                   checked={logFinanceOnBuy}
@@ -1144,15 +1158,20 @@ export const KosManView: React.FC<KosManViewProps> = ({
             </div>
           </div>
 
-          {/* Multi-Add Batch Wishlist Form (Inline) */}
-          {showWishBatchForm && (
-            <form
-              onSubmit={handleBatchWishlistSubmit}
-              className="bg-[#FFFDF6] border-2 border-black p-3 rounded-xl shadow-[3px_3px_0px_#000] space-y-2.5"
-            >
-              <div className="flex items-center justify-between border-b border-black pb-1.5">
-                <span className="font-display font-black text-xs uppercase text-black">
-                  Tambah Banyak Barang Wishlist Sekaligus
+          {/* Pop-Up Multi-Add Batch Wishlist Form */}
+          <PopupModal
+            isOpen={showWishBatchForm}
+            onClose={() => setShowWishBatchForm(false)}
+            title="Tambah Banyak Barang Wishlist Sekaligus"
+            subtitle="Tambahkan beberapa barang sekaligus ke daftar belanja KosMan"
+            icon={<IconPlus className="w-4 h-4 text-black" />}
+            headerBg="bg-[#FF4B82]"
+            maxWidthClass="max-w-3xl"
+          >
+            <form onSubmit={handleBatchWishlistSubmit} className="space-y-2.5 pb-12">
+              <div className="flex items-center justify-between border-b border-black pb-2">
+                <span className="text-[11px] font-bold text-slate-700">
+                  Isi beberapa baris sekaligus lalu simpan.
                 </span>
                 <button
                   type="button"
@@ -1267,19 +1286,19 @@ export const KosManView: React.FC<KosManViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowWishBatchForm(false)}
-                  className="px-3 py-1.5 bg-white border border-black rounded-lg text-xs font-bold"
+                  className="px-3 py-1.5 bg-white border-2 border-black rounded-lg text-xs font-bold"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="comic-button bg-[#A3E635] text-black px-3.5 py-1.5 rounded-lg border border-black text-xs font-black uppercase"
+                  className="comic-button bg-[#A3E635] text-black px-3.5 py-1.5 rounded-lg border-2 border-black text-xs font-black uppercase shadow-[2px_2px_0px_#000]"
                 >
                   Simpan {wishBatchRows.filter((r) => r.name.trim()).length} Wishlist
                 </button>
               </div>
             </form>
-          )}
+          </PopupModal>
 
           {/* Bulk Action Bar */}
           {wishlist.length > 0 && (

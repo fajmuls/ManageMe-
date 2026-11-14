@@ -54,6 +54,7 @@ import { OfflineIndicator } from './components/PWAInstallBanner';
 import { OcrExtractedItem, ScannedStockItem } from './components/InlineUI';
 import {
   FullSpreadsheetPayload,
+  OAUTH_RETURN_PANEL_KEY,
   autoSyncKosmanFullToSheets,
   autoSyncWishlistFullToSheets,
   autoSyncFinanceFullToSheets,
@@ -89,8 +90,14 @@ export default function App() {
   const [currentView, setCurrentView] = useState<ActiveAppView>('hub');
   const [financeInitialTab, setFinanceInitialTab] = useState<'transaksi' | 'budget' | 'tabungan'>('transaksi');
 
-  // Inline utility panel state (no pop-up modal overlays)
-  const [activeUtilityPanel, setActiveUtilityPanel] = useState<'none' | 'chatgpt' | 'sheets' | 'settings'>('none');
+  // Pop-up utility panel state (auto-open Set Spreadsheet if returning from OAuth redirect)
+  const [activeUtilityPanel, setActiveUtilityPanel] = useState<'none' | 'chatgpt' | 'sheets' | 'settings'>(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem(OAUTH_RETURN_PANEL_KEY) === 'sheets') {
+      localStorage.removeItem(OAUTH_RETURN_PANEL_KEY);
+      return 'sheets';
+    }
+    return 'none';
+  });
 
   const toggleUtilityPanel = (panel: 'chatgpt' | 'sheets' | 'settings') => {
     setActiveUtilityPanel((prev) => (prev === panel ? 'none' : panel));

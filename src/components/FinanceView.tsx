@@ -20,6 +20,7 @@ import {
   InlineConfirmBar,
   InlineNotice,
   InlineScannerPanel,
+  PopupModal,
   OcrExtractedItem,
   ScannedStockItem,
 } from './InlineUI';
@@ -401,12 +402,17 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             </div>
           </div>
 
-          {/* Inline Add Transaction Form */}
-          {showAddForm && (
-            <form
-              onSubmit={handleFormSubmit}
-              className="bg-[#FFFDF6] border-2 border-black p-3.5 rounded-xl shadow-[3px_3px_0px_#000] space-y-2.5"
-            >
+          {/* Pop-Up Add Transaction Form */}
+          <PopupModal
+            isOpen={showAddForm}
+            onClose={() => setShowAddForm(false)}
+            title="Catat Transaksi Keuangan Baru"
+            subtitle="Pemasukan atau pengeluaran otomatis disinkronkan ke Google Spreadsheet"
+            icon={<IconWallet className="w-4 h-4 text-black" />}
+            headerBg="bg-[#FFD000]"
+            maxWidthClass="max-w-2xl"
+          >
+            <form onSubmit={handleFormSubmit} className="space-y-3 pb-12">
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -428,7 +434,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-[10px] font-black uppercase text-slate-700 mb-1">
                     Nominal (Rp) *
@@ -441,6 +447,18 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                     placeholder="25000"
                     className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg text-xs font-mono font-black bg-white tabular-nums"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-700 mb-1">
+                    Tanggal
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg text-xs font-mono bg-white"
                   />
                 </div>
 
@@ -475,37 +493,38 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     setFormData({ ...formData, account: val as 'Kas' | 'Bank' | 'E-Wallet' })
                   }
                 />
-
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-700 mb-1">
-                    Tanggal
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg text-xs font-mono bg-white"
-                  />
-                </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-2">
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-700 mb-1">
+                  Keterangan
+                </label>
                 <input
                   type="text"
                   value={formData.note}
                   onChange={(e) => setFormData({ ...formData, note: e.target.value })}
                   placeholder="Keterangan singkat transaksi..."
-                  className="flex-1 px-2.5 py-1.5 border-2 border-black rounded-lg text-xs font-bold bg-white"
+                  className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg text-xs font-bold bg-white"
                 />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(false)}
+                  className="px-3 py-1.5 bg-white border-2 border-black rounded-lg text-xs font-bold text-black"
+                >
+                  Batal
+                </button>
                 <button
                   type="submit"
-                  className="comic-button bg-[#A3E635] text-black px-4 py-1.5 rounded-lg border border-black text-xs font-black uppercase"
+                  className="comic-button bg-[#A3E635] text-black px-4 py-1.5 rounded-lg border-2 border-black text-xs font-black uppercase shadow-[2px_2px_0px_#000]"
                 >
                   Simpan Transaksi
                 </button>
               </div>
             </form>
-          )}
+          </PopupModal>
 
           {deleteRecConfirmId && (
             <InlineConfirmBar
@@ -845,7 +864,15 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             </button>
           </div>
 
-          {showSavingForm && (
+          <PopupModal
+            isOpen={showSavingForm}
+            onClose={() => setShowSavingForm(false)}
+            title="Tambah Target Tabungan Baru"
+            subtitle="Tetapkan nominal target & lokasi penyimpanan dana"
+            icon={<IconPlus className="w-4 h-4 text-black" />}
+            headerBg="bg-[#A3E635]"
+            maxWidthClass="max-w-xl"
+          >
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -858,53 +885,77 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 });
                 setSavingFormData({ name: '', targetAmount: '', currentAmount: '', location: 'Bank' });
                 setShowSavingForm(false);
+                setNotice({ type: 'success', text: 'Target tabungan baru ditambahkan.' });
               }}
-              className="bg-[#FFFDF6] border-2 border-black p-3 rounded-xl space-y-2"
+              className="space-y-2.5 pb-12"
             >
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-                <input
-                  type="text"
-                  required
-                  value={savingFormData.name}
-                  onChange={(e) => setSavingFormData({ ...savingFormData, name: e.target.value })}
-                  placeholder="Nama Target (Dana Darurat, Laptop)..."
-                  className="px-2.5 py-1.5 border-2 border-black rounded-lg text-xs font-bold bg-white"
-                />
-                <input
-                  type="number"
-                  required
-                  value={savingFormData.targetAmount}
-                  onChange={(e) =>
-                    setSavingFormData({ ...savingFormData, targetAmount: e.target.value })
-                  }
-                  placeholder="Target Nominal (Rp)"
-                  className="px-2.5 py-1.5 border-2 border-black rounded-lg text-xs font-mono bg-white"
-                />
-                <input
-                  type="number"
-                  value={savingFormData.currentAmount}
-                  onChange={(e) =>
-                    setSavingFormData({ ...savingFormData, currentAmount: e.target.value })
-                  }
-                  placeholder="Saldo Awal (Rp)"
-                  className="px-2.5 py-1.5 border-2 border-black rounded-lg text-xs font-mono bg-white"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-700 mb-1">
+                    Nama Target *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={savingFormData.name}
+                    onChange={(e) => setSavingFormData({ ...savingFormData, name: e.target.value })}
+                    placeholder="Dana Darurat, Laptop..."
+                    className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg text-xs font-bold bg-white"
+                  />
+                </div>
                 <InlineDropdown
+                  label="Simpan Di"
                   value={savingFormData.location}
                   options={['Bank', 'E-Wallet', 'Kas Tunai']}
                   onChange={(val) => setSavingFormData({ ...savingFormData, location: val })}
                 />
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-700 mb-1">
+                    Target Nominal (Rp) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={savingFormData.targetAmount}
+                    onChange={(e) =>
+                      setSavingFormData({ ...savingFormData, targetAmount: e.target.value })
+                    }
+                    placeholder="500000"
+                    className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg text-xs font-mono bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-700 mb-1">
+                    Saldo Awal (Rp)
+                  </label>
+                  <input
+                    type="number"
+                    value={savingFormData.currentAmount}
+                    onChange={(e) =>
+                      setSavingFormData({ ...savingFormData, currentAmount: e.target.value })
+                    }
+                    placeholder="0"
+                    className="w-full px-2.5 py-1.5 border-2 border-black rounded-lg text-xs font-mono bg-white"
+                  />
+                </div>
               </div>
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowSavingForm(false)}
+                  className="px-3 py-1.5 bg-white border-2 border-black rounded-lg text-xs font-bold"
+                >
+                  Batal
+                </button>
                 <button
                   type="submit"
-                  className="comic-button bg-[#FFD000] text-black px-3.5 py-1.5 rounded-lg border border-black text-xs font-black uppercase"
+                  className="comic-button bg-[#FFD000] text-black px-3.5 py-1.5 rounded-lg border-2 border-black text-xs font-black uppercase shadow-[2px_2px_0px_#000]"
                 >
                   Simpan Target
                 </button>
               </div>
             </form>
-          )}
+          </PopupModal>
 
           {deleteSaveConfirmId && (
             <InlineConfirmBar

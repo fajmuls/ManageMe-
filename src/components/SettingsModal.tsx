@@ -9,7 +9,7 @@ import {
   IconSparkles,
   IconCheckCircle,
 } from './icons/SvgIcons';
-import { InlineConfirmBar, InlineNotice } from './InlineUI';
+import { InlineConfirmBar, InlineNotice, PopupModal } from './InlineUI';
 import { PWAInstallButton } from './PWAInstallBanner';
 import { Smartphone } from 'lucide-react';
 
@@ -44,8 +44,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   useEffect(() => {
     setEditableVersions(versions);
   }, [versions, isOpen]);
-
-  if (!isOpen) return null;
 
   const handleSaveVersions = (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,32 +99,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <section className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 pt-3">
-      <div className="bg-white border-2 border-black rounded-xl p-4 sm:p-5 shadow-[4px_4px_0px_#000] space-y-3.5">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b-2 border-black pb-2">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-[#FFD000] border border-black rounded-lg flex items-center justify-center font-black shadow-[1.5px_1.5px_0px_#000]">
-              <IconSettings className="w-4 h-4 text-black" />
-            </div>
-            <div>
-              <h3 className="font-display font-black text-sm sm:text-base uppercase text-black leading-none">
-                PENGATURAN, VERSI & BACKUP APK
-              </h3>
-              <span className="text-[10px] font-bold text-slate-500 uppercase">
-                ManageMe! System Core
-              </span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-2.5 py-1 bg-slate-100 border border-black rounded-lg text-xs font-black text-black"
-          >
-            Tutup
-          </button>
-        </div>
-
+    <PopupModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="PENGATURAN, VERSI & BACKUP APK"
+      subtitle="ManageMe! System Core"
+      icon={<IconSettings className="w-4 h-4 text-black" />}
+      headerBg="bg-[#FFD000]"
+      maxWidthClass="max-w-3xl"
+    >
+      <div className="space-y-3.5">
         {notice && (
           <InlineNotice
             type={notice.type}
@@ -191,7 +173,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </label>
                     <input
                       type="text"
-                      value={(editableVersions as any)[mod.key] || '2.4.1'}
+                      value={(editableVersions as any)[mod.key] || '2.4.3'}
                       onChange={(e) =>
                         setEditableVersions({ ...editableVersions, [mod.key]: e.target.value })
                       }
@@ -218,7 +200,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="space-y-2 text-xs">
             <div className="bg-[#00E5FF]/20 border border-black p-2.5 rounded-xl font-bold text-slate-800 flex items-center gap-2">
               <IconSparkles className="w-4 h-4 text-black shrink-0" />
-              <span>Catatan pembaruan v2.4.1 & rekomendasi teknis terbaru:</span>
+              <span>Catatan pembaruan v2.4.3 & rekomendasi teknis terbaru:</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -287,7 +269,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div>
                   <h4 className="font-black text-xs uppercase text-red-700">Reset Data Aplikasi:</h4>
                   <p className="text-[11px] text-slate-700 font-medium">
-                    Kosongkan seluruh data lokal ke kondisi bersih v2.4.0.
+                    Kosongkan seluruh data lokal ke kondisi bersih v2.4.3.
                   </p>
                 </div>
                 {!confirmReset && (
@@ -318,6 +300,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         )}
       </div>
-    </section>
+    </PopupModal>
   );
 };

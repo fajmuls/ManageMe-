@@ -70,11 +70,11 @@ export const DEVELOPER_SUGGESTIONS: DeveloperSuggestion[] = [
   },
   {
     id: 'sug-v2-20',
-    title: 'UI 100% Inline Tanpa Pop-up Modal & Tanpa Dropdown Melayang',
+    title: 'UI Pop-Up Overlay Menyatu (Dropdown, Notifikasi, Form Edit, ChatGPT & Scan Stok)',
     type: 'optimization',
-    description: 'Seluruh dropdown, konfirmasi hapus/reset, notifikasi status, panel Set Spreadsheet, dan form input kini membuka ke bawah menyatu dengan website (in-flow) sehingga aman di layar HP dan WebAPK.',
+    description: 'Dropdown, notifikasi toast, konfirmasi hapus/reset, form Tambah/Edit, panel ChatGPT, Set Spreadsheet, dan AI Scanner (Scan Nota/Stok) kini tampil sebagai pop-up overlay Pop Comic yang menimpa layer di bawahnya tanpa menggeser dashboard.',
     impact: 'High',
-    suggestedAction: 'Gunakan dropdown kategori atau panel Set Spreadsheet yang kini terbuka langsung di bawah tombolnya.',
+    suggestedAction: 'Klik + Tambah Barang, ChatGPT, Scan Stok/Nota, atau dropdown filter untuk melihat tampilan pop-up overlay.',
     applied: true,
   },
   {
@@ -102,6 +102,24 @@ export const DEVELOPER_SUGGESTIONS: DeveloperSuggestion[] = [
     description: 'AI Scanner (gemini-4-hydrogen) kini hadir di KosMan dan Keuangan dengan 2 mode: Scan Nota Belanja (otomatis catat pengeluaran + tambah stok & riwayat barang) dan Scan Stok (foto rak/barang kos untuk cek & update stok ke Spreadsheet).',
     impact: 'High',
     suggestedAction: 'Tekan tombol Scan Nota / Stok di KosMan atau Keuangan untuk mencoba.',
+    applied: true,
+  },
+  {
+    id: 'sug-v2-24',
+    title: 'Filter Kategori, Sub-Kategori & Urutkan Tabel Berjajar 3 Kolom di KosMan',
+    type: 'optimization',
+    description: 'Ketiga kontrol filter & pengurutan tabel KosMan kini berjajar 3 kolom ke kanan (horizontal) agar hemat ruang vertikal dan tetap rapi di layar mobile.',
+    impact: 'Medium',
+    suggestedAction: 'Buka tab Tabel Inventaris KosMan dan gunakan baris 3 filter di bawah kotak pencarian.',
+    applied: true,
+  },
+  {
+    id: 'sug-v2-25',
+    title: 'Perbaikan Login Google Anti-Timeout (GIS & Mode Redirect) + Panduan Vercel (v2.4.3)',
+    type: 'optimization',
+    description: 'Menambahkan mode Pop-Up GIS (tahan lama) dan Mode Redirect satu tab agar tidak muncul error "jendela ditutup sebelum selesai" saat melewati layar konfirmasi Google yang belum diverifikasi, serta checklist domain manageme-seven.vercel.app.',
+    impact: 'High',
+    suggestedAction: 'Buka Set Spreadsheet → Langkah 1 untuk memakai Pop-Up GIS / Mode Redirect dan salin domain Vercel ke Firebase Console.',
     applied: true,
   }
 ];
