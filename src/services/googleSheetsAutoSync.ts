@@ -1,5 +1,13 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from 'firebase/auth';
+import {
+  getAuth,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  User,
+} from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { TARGET_SPREADSHEET_ID } from '../data/initialAppData';
 import { normalizeKosCategory } from '../data/kosmanItems';
@@ -32,9 +40,11 @@ export const SCOPES = [
 
 const provider = new GoogleAuthProvider();
 SCOPES.forEach((s) => provider.addScope(s));
+provider.setCustomParameters({ prompt: 'select_account' });
 
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
+let cachedUserEmail: string | null = null;
 
 export const getSpreadsheetId = (): string => {
   return localStorage.getItem('manageme_target_spreadsheet_id') || TARGET_SPREADSHEET_ID;
@@ -55,52 +65,177 @@ export const extractSpreadsheetId = (urlOrId: string): string => {
   return match ? match[1] : urlOrId.trim();
 };
 
+const loadGisScript = (): Promise<void> =>
+  new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') return reject(new Error('Browser window unavailable'));
+    if ((window as any).google?.accounts?.oauth2) return resolve();
+    const existing = document.querySelector('script[data-gis-client="true"]') as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error('Gagal memuat Google Identity Services')), { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.dataset.gisClient = 'true';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Gagal memuat Google Identity Services'));
+    document.head.appendChild(script);
+  });
+
+// Fallback langsung via Google Identity Services OAuth2 Token Client (memakai oAuthClientId, tanpa Firestore)
+const requestGisTokenFallback = async (): Promise<{
+  email: string;
+  accessToken: string;
+}> => {
+  const clientId = (firebaseConfig as any).oAuthClientId;
+  if (!clientId) {
+    throw new Error('oAuthClientId belum tersedia di konfigurasi applet.');
+  }
+  await loadGisScript();
+  const tokenResp = await new Promise<{ access_token: string }>((resolve, reject) => {
+    const oauth2 = (window as any).google?.accounts?.oauth2;
+    if (!oauth2) {
+      reject(new Error('Google Identity OAuth2 tidak tersedia di browser ini.'));
+      return;
+    }
+    const client = oauth2.initTokenClient({
+      client_id: clientId,
+      scope: `${SCOPES.join(' ')} https://www.googleapis.com/auth/userinfo.email`,
+      callback: (resp: any) => {
+        if (resp?.error) {
+          reject(new Error(resp.error_description || resp.error || 'OAuth dibatalkan'));
+          return;
+        }
+        if (!resp?.access_token) {
+          reject(new Error('Token akses Google tidak diterima.'));
+          return;
+        }
+        resolve(resp);
+      },
+      error_callback: (err: any) => {
+        reject(new Error(err?.message || 'Pop-up Google Login diblokir oleh browser.'));
+      },
+    });
+    client.requestAccessToken({ prompt: 'consent select_account' });
+  });
+
+  let email = 'Google Account';
+  try {
+    const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${tokenResp.access_token}` },
+    });
+    if (profileRes.ok) {
+      const profile = await profileRes.json();
+      if (profile?.email) email = profile.email;
+    }
+  } catch {
+    // ignore userinfo failure; token is still valid for Sheets
+  }
+
+  return { email, accessToken: tokenResp.access_token };
+};
+
 export const initGoogleAuth = (
-  onAuthSuccess?: (user: User, token: string) => void,
+  onAuthSuccess?: (email: string, token: string) => void,
   onAuthFailure?: () => void
 ) => {
-  return onAuthStateChanged(auth, async (user: User | null) => {
-    if (user && cachedAccessToken) {
-      if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-    } else {
-      if (!isSigningIn) {
-        cachedAccessToken = null;
-        if (onAuthFailure) onAuthFailure();
+  // Cek apakah baru kembali dari alur redirect login
+  getRedirectResult(auth)
+    .then((result) => {
+      if (result) {
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        if (credential?.accessToken) {
+          cachedAccessToken = credential.accessToken;
+          cachedUserEmail = result.user.email || 'Google Account';
+          if (onAuthSuccess) onAuthSuccess(cachedUserEmail, cachedAccessToken);
+        }
       }
+    })
+    .catch(() => {});
+
+  return onAuthStateChanged(auth, async (user: User | null) => {
+    if (cachedAccessToken) {
+      const email = user?.email || cachedUserEmail || 'Google Account';
+      cachedUserEmail = email;
+      if (onAuthSuccess) onAuthSuccess(email, cachedAccessToken);
+    } else if (!isSigningIn) {
+      cachedAccessToken = null;
+      cachedUserEmail = null;
+      if (onAuthFailure) onAuthFailure();
     }
   });
 };
 
 export const googleSignIn = async (): Promise<{
-  user: User;
+  email: string;
   accessToken: string;
   spreadsheetId: string;
 } | null> => {
   try {
     isSigningIn = true;
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error('Gagal mendapatkan token akses Google Sign-In');
-    }
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (!credential?.accessToken) {
+        throw new Error('Token akses Google Sheets tidak diterima dari Firebase Auth');
+      }
+      cachedAccessToken = credential.accessToken;
+      cachedUserEmail = result.user.email || 'Google Account';
+      return {
+        email: cachedUserEmail,
+        accessToken: cachedAccessToken,
+        spreadsheetId: getSpreadsheetId(),
+      };
+    } catch (firebaseErr: any) {
+      const code = firebaseErr?.code || '';
+      const shouldFallbackToGis =
+        code === 'auth/unauthorized-domain' ||
+        code === 'auth/operation-not-allowed' ||
+        code === 'auth/internal-error' ||
+        code === 'auth/web-storage-unsupported';
 
-    cachedAccessToken = credential.accessToken;
-    const spreadsheetId = getSpreadsheetId();
-    return { user: result.user, accessToken: cachedAccessToken, spreadsheetId };
-  } catch (error: any) {
-    console.error('Google Sign-In Error:', error);
-    throw error;
+      if (shouldFallbackToGis) {
+        const gis = await requestGisTokenFallback();
+        cachedAccessToken = gis.accessToken;
+        cachedUserEmail = gis.email;
+        return {
+          email: gis.email,
+          accessToken: gis.accessToken,
+          spreadsheetId: getSpreadsheetId(),
+        };
+      }
+
+      if (code === 'auth/popup-blocked') {
+        throw new Error(
+          'Pop-up login diblokir oleh browser/iframe. Izinkan pop-up atau klik "Buka App di Tab Baru" di panel ini lalu coba Sign in lagi.'
+        );
+      }
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+        throw new Error('Jendela login Google ditutup sebelum selesai. Silakan coba lagi.');
+      }
+
+      throw new Error(firebaseErr?.message || 'Gagal login Google Workspace.');
+    }
   } finally {
     isSigningIn = false;
   }
 };
 
+export const googleSignInRedirect = async () => {
+  await signInWithRedirect(auth, provider);
+};
+
 export const getAccessToken = (): string | null => cachedAccessToken;
 export const getCurrentUser = (): User | null => auth.currentUser;
+export const getConnectedEmail = (): string | null => cachedUserEmail || auth.currentUser?.email || null;
 
 export const googleSignOut = async () => {
-  await auth.signOut();
+  await auth.signOut().catch(() => {});
   cachedAccessToken = null;
+  cachedUserEmail = null;
 };
 
 // Fetch spreadsheet metadata (tabs & sheetIds)

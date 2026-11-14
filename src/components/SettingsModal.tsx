@@ -191,7 +191,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </label>
                     <input
                       type="text"
-                      value={(editableVersions as any)[mod.key] || '2.4.0'}
+                      value={(editableVersions as any)[mod.key] || '2.4.1'}
                       onChange={(e) =>
                         setEditableVersions({ ...editableVersions, [mod.key]: e.target.value })
                       }
@@ -218,7 +218,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="space-y-2 text-xs">
             <div className="bg-[#00E5FF]/20 border border-black p-2.5 rounded-xl font-bold text-slate-800 flex items-center gap-2">
               <IconSparkles className="w-4 h-4 text-black shrink-0" />
-              <span>Catatan pembaruan v2.4.0 & rekomendasi teknis terbaru:</span>
+              <span>Catatan pembaruan v2.4.1 & rekomendasi teknis terbaru:</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">

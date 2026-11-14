@@ -5,12 +5,12 @@ import {
 } from '../types/kosman';
 
 export const INITIAL_APP_VERSIONS: AppVersionState = {
-  hub: '2.4.0',
-  kosman: '2.4.0',
-  finance: '2.4.0',
-  activities: '2.4.0',
-  notes: '2.4.0',
-  worship: '2.4.0'
+  hub: '2.4.1',
+  kosman: '2.4.1',
+  finance: '2.4.1',
+  activities: '2.4.1',
+  notes: '2.4.1',
+  worship: '2.4.1'
 };
 
 export const TARGET_SPREADSHEET_ID = '1npqZQRi9KLtQBwi2iLohxgZQyjQjWYpirB6oTHvlmYw';
